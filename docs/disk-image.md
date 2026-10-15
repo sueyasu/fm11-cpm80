@@ -1,19 +1,24 @@
-# 2D disk image build
+# Disk image build
 
-`make image` builds a bootable Fujitsu-compatible 2D CP/M disk in D88 format:
+`make image` builds two D88 images:
 
 ```text
 build/images/fm11-cpm80-2d.d88
+build/images/fm11-cpm80-2hd.d88
 ```
 
-For inspection and emulator/debug use, the equivalent raw 320 KiB sector image
-is also written as:
+Equivalent raw sector images are also written as:
 
 ```text
 build/images/fm11-cpm80-2d.raw
+build/images/fm11-cpm80-2hd.raw
 ```
 
-## Geometry
+The 2D image is the current bootable system disk. The 2HD image is a formatted
+non-bootable data disk prepared for the existing 2HD DPB; 2HD boot and runtime
+Standard-FDC read/write support are intentionally not part of this stage.
+
+## 2D geometry
 
 ```text
 40 cylinders
@@ -26,7 +31,7 @@ build/images/fm11-cpm80-2d.raw
 The D88 image uses media type `00h` (2D), 80 formatted track entries, 16
 sectors per track entry, and 256-byte sectors.
 
-## Boot/system area
+### 2D boot/system area
 
 DPB `OFF=2` reserves the first two cylinders, giving a 16 KiB system area at
 raw offsets `$0000-$3FFF`.
@@ -62,21 +67,10 @@ WBOOT reuses the same system image and reloads only CCP+BDOS (`$1600` bytes,
 `$DC00-$F1FF`. BIOS at `$F200-$F5FF` and the private 6809 I/O server remain
 resident.
 
-The image builder rejects an IPL larger than `$0200`, a system payload whose
+The 2D image builder rejects an IPL larger than `$0200`, a system payload whose
 size is not exactly `$1A00`, or an I/O server larger than `$0400`.
 
-## Adding CP/M commands
-
-Place local command binaries in:
-
-```text
-external/commands/
-```
-
-Only `.COM` files are imported. Names are converted to upper case and must fit
-CP/M 8.3 naming rules. They are installed in user area 0.
-
-The builder implements the current 2D DPB:
+The 2D DPB is:
 
 ```text
 BSH=4       2 KiB allocation blocks
@@ -87,5 +81,49 @@ AL0=C0h     directory uses blocks 0 and 1
 OFF=2       two reserved cylinders
 ```
 
-Files larger than 32 KiB are split across multiple CP/M directory extents.
-Allocation is deterministic and sequential.
+## 2HD data image
+
+The generated 2HD image uses the geometry already described by the BIOS DPB:
+
+```text
+77 cylinders
+2 heads
+26 physical sectors/head
+256 bytes/physical sector
+raw size = $FA400 bytes
+```
+
+The D88 image uses media type `20h` (2HD), 154 formatted track entries, 26
+sectors per track entry, and 256-byte sectors.
+
+DPB `OFF=2` reserves cylinders 0 and 1, giving a `$6800`-byte system area. The
+current 2HD image is deliberately non-bootable, so that area is zero-filled:
+
+```text
+00000-067FF  reserved system area
+06800-077FF  CP/M directory (allocation block 0)
+07800-       file data (allocation block 1 onward)
+```
+
+The 2HD DPB is:
+
+```text
+BSH=5       4 KiB allocation blocks
+EXM=3       up to 64 KiB per physical directory entry
+DSM=242     allocation blocks 0..242
+DRM=127     128 directory entries
+AL0=80h     directory uses block 0
+OFF=2       two reserved cylinders
+```
+
+## Adding CP/M commands
+
+Place local command binaries in:
+
+```text
+external/commands/
+```
+
+Only `.COM` files are imported. Names are converted to upper case and must fit
+CP/M 8.3 naming rules. They are installed in user area 0 of both generated
+images. Allocation is deterministic and sequential.

@@ -15,11 +15,13 @@ CPM22_FUJITSU_CORE ?= external/cpm22/ccpbdos56.bin
 FUJITSU_CPM_IMAGE  ?= external/reference/cpm2d00.img
 COMMANDS_DIR       ?= external/commands
 
-D88_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.d88
-RAW_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.raw
+D88_IMAGE_2D  := $(IMAGE_BUILD)/fm11-cpm80-2d.d88
+RAW_IMAGE_2D  := $(IMAGE_BUILD)/fm11-cpm80-2d.raw
+D88_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.d88
+RAW_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.raw
 COMMAND_FILES := $(wildcard $(COMMANDS_DIR)/*.COM) $(wildcard $(COMMANDS_DIR)/*.com)
 
-.PHONY: all check-tools bios ioserver ipl system image extract-core clean
+.PHONY: all check-tools bios ioserver ipl system image image2d image2hd extract-core clean
 
 all: check-tools image
 
@@ -57,17 +59,26 @@ system: $(CPM_BUILD)/system62.bin
 $(CPM_BUILD)/system62.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py | $(CPM_BUILD)
 	$(PYTHON) tools/mksystem.py --core $(CPM22_CORE) --bios $(Z80_BUILD)/bios.bin --output $@
 
-image: $(D88_IMAGE)
+image: $(D88_IMAGE_2D) $(D88_IMAGE_2HD)
+image2d: $(D88_IMAGE_2D)
+image2hd: $(D88_IMAGE_2HD)
 
-$(D88_IMAGE): $(M6809_BUILD)/ipl_2d.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+$(D88_IMAGE_2D): $(M6809_BUILD)/ipl_2d.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
 	$(PYTHON) tools/mk2d_d88.py \
 		--ipl $(M6809_BUILD)/ipl_2d.bin \
 		--system $(CPM_BUILD)/system62.bin \
 		--ioserver $(M6809_BUILD)/ioserver.bin \
 		--commands $(COMMANDS_DIR) \
 		--output $@ \
-		--raw-output $(RAW_IMAGE) \
+		--raw-output $(RAW_IMAGE_2D) \
 		--label "FM11 CPM80"
+
+$(D88_IMAGE_2HD): tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2hd_d88.py \
+		--commands $(COMMANDS_DIR) \
+		--output $@ \
+		--raw-output $(RAW_IMAGE_2HD) \
+		--label "FM11 CPM80 2HD"
 
 $(CPM22_CORE):
 	@echo "error: missing $@" >&2

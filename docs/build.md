@@ -42,8 +42,8 @@ Place optional `.COM` files in:
 external/commands/
 ```
 
-They are installed in user area 0 of the generated disk and are not tracked by
-Git.
+They are installed in user area 0 of both generated disk images and are not
+tracked by Git.
 
 ## Z80 memory layout
 
@@ -67,6 +67,10 @@ loaded at physical `$10000`, and reached through MMR14 while the 6809 runs.
 make
 ```
 
+The default build creates both the bootable 2D system disk and a formatted
+non-bootable 2HD data disk. The latter is prepared for the current 2HD DPB but
+2HD boot and Standard-FDC runtime I/O are not implemented yet.
+
 Useful individual targets:
 
 ```sh
@@ -76,6 +80,8 @@ make ioserver
 make system
 make ipl
 make image
+make image2d
+make image2hd
 make extract-core
 make clean
 ```
@@ -89,6 +95,8 @@ build/m6809/ipl_2d.bin
 build/cpm22/system62.bin
 build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2d.d88
+build/images/fm11-cpm80-2hd.raw
+build/images/fm11-cpm80-2hd.d88
 ```
 
 `ipl_2d.bin` is the 512-byte-maximum ROM-loaded IPL assembled for `$0400`.
