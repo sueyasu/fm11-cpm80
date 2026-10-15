@@ -19,14 +19,18 @@ TRAMPOLINE_BASE equ    $FE00
 CPM_SYSTEM_DEST equ    $DC00
 CPM_SYSTEM_SECTORS equ 26
 CPM_WBOOT_SECTORS equ  22
-CPM_WORK_BASE   equ    $F9A0
-CPM_WORK_LEN    equ    $0248
+CPM_WORK_BASE   equ    $F970
+CPM_WORK_LEN    equ    $0278
+BOOTTYPE        equ    $FBF5
+BOOT_2D         equ    $00
+BOOT_2HD        equ    $01
 SYSTEM_TRACK    equ    1
 
         org     $E000
 
 IoServerStart
         orcc    #$50            * mask IRQ/FIRQ while establishing service
+        clr     BOOTTYPE        * current IPL is the 2D boot path
         clr     MBOX_CMD
         clr     MBOX_STATUS
 
@@ -92,12 +96,13 @@ ServiceBad
 ServiceRead
         lbsr    ValidateDiskRequest
         lbcs    ServiceBad
+        lbsr    ResolveLogicalDrive
+        lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
 
-        lda     MBOX_DRIVE
-        cmpa    #4
-        bhs     ServiceRead2HD
+        lda     PhysIs2HD
+        bne     ServiceRead2HD
         lbsr    MiniFdcReadSector
         bra     ServiceReadCopy
 ServiceRead2HD
@@ -114,14 +119,15 @@ ServiceReadCopy
 ServiceWrite
         lbsr    ValidateDiskRequest
         lbcs    ServiceBad
+        lbsr    ResolveLogicalDrive
+        lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
 
 * All floppy formats use 256-byte physical sectors while CP/M writes 128-byte
 * records. Preserve the neighbouring record with a read/modify/write cycle.
-        lda     MBOX_DRIVE
-        cmpa    #4
-        bhs     ServiceWrite2HD
+        lda     PhysIs2HD
+        bne     ServiceWrite2HD
         lbsr    MiniFdcReadSector
         lbcs    ServiceBad
         lbsr    CopyDmaToWriteHalf
@@ -162,6 +168,32 @@ VdrBad
         orcc    #$01
         rts
 
+* Resolve logical CP/M drive letters into a physical controller family and
+* unit.  A:-D: always refer to the family used for boot, while E:-H: refer to
+* the other family.  The unit number within either family is always 0-3.
+ResolveLogicalDrive
+        lda     MBOX_DRIVE
+        cmpa    #8
+        bhs     RldBad
+        anda    #$03
+        sta     PhysDrive
+
+        lda     BOOTTYPE
+        anda    #$01
+        sta     PhysIs2HD
+        lda     MBOX_DRIVE
+        bita    #$04
+        beq     RldDone
+        lda     PhysIs2HD
+        eora    #$01
+        sta     PhysIs2HD
+RldDone
+        andcc   #$FE
+        rts
+RldBad
+        orcc    #$01
+        rts
+
 * A CP/M logical record is 128 bytes.  Reject a DMA address whose complete
 * record would extend beyond the last Z80 RAM byte at $FBFF.
 ValidateDmaRange
@@ -174,7 +206,9 @@ VdmBad
         orcc    #$01
         rts
 
-* Convert a CP/M 128-byte logical sector to physical FDC geometry.
+* Convert a CP/M 128-byte logical sector to physical FDC geometry. The media
+* geometry comes from ResolveLogicalDrive rather than directly from the
+* logical drive number.
 DecodeLogicalSector
         lda     MBOX_TRACK_H
         bne     DlsBad
@@ -185,9 +219,8 @@ DecodeLogicalSector
         bne     DlsBad
         ldb     MBOX_SECTOR_L
 
-        lda     MBOX_DRIVE
-        cmpa    #4
-        bhs     Dls2HD
+        lda     PhysIs2HD
+        bne     Dls2HD
 
 * 2D: 40 cylinders, 64 records/cylinder, 32 records/side.
         lda     PhysTrack
@@ -234,7 +267,7 @@ DlsBad
         rts
 
 MiniFdcSelect
-        lda     MBOX_DRIVE
+        lda     PhysDrive
         anda    #$03
         ora     #MINIFDC_MOTOR
         sta     MINIFDC_DRIVE
@@ -428,12 +461,12 @@ MfwFailAck
         orcc    #$01
         rts
 
-* Select one of the four 2HD drives on the Standard FDC.  CP/M E:-H: map to
-* controller drive numbers 0-3.  Track 0's special boot format is never used
-* by normal CP/M I/O because the 2HD DPB has OFF=2.
+* Select one of the four 2HD drives on the Standard FDC. ResolveLogicalDrive
+* has already converted the CP/M drive letter to controller unit 0-3.
+* Track 0's special boot format is never used by normal CP/M I/O because the
+* 2HD DPB has OFF=2.
 StdFdcSelect
-        lda     MBOX_DRIVE
-        suba    #4
+        lda     PhysDrive
         anda    #$03
         sta     STDFDC_DRIVE
         lda     PhysSide
@@ -559,6 +592,8 @@ ColdBootLoadSystem
         lbsr    MiniFdcPrepareSystemTrack
         bcs     CblFail
         clr     MBOX_DRIVE
+        clr     PhysDrive
+        clr     PhysIs2HD
         lda     #SYSTEM_TRACK
         sta     PhysTrack
         clr     PhysSide
@@ -587,11 +622,15 @@ CblFail
         rts
 
 * Warm boot uses the same cylinder-1 system image but reloads only CCP+BDOS.
-* BIOS remains resident while the service call is in progress.
+* BIOS remains resident while the service call is in progress.  The current
+* implementation has only the 2D boot path, so the system image is still read
+* through Mini FDC drive 0; 2HD boot will supply the corresponding loader.
 WarmBootReload
         lbsr    MiniFdcPrepareSystemTrack
         bcs     WbrFail
         clr     MBOX_DRIVE
+        clr     PhysDrive
+        clr     PhysIs2HD
         lda     #SYSTEM_TRACK
         sta     PhysTrack
         clr     PhysSide
@@ -723,6 +762,8 @@ PhysSide        rmb     1
 PhysSector      rmb     1
 PhysHalf        rmb     1
 PhysFdcBase     rmb     2
+PhysDrive       rmb     1
+PhysIs2HD       rmb     1
 WBootDest       rmb     2
 SavedMmrD       rmb     1
 PhysBuf         rmb     256

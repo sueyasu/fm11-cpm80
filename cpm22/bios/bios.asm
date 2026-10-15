@@ -5,7 +5,8 @@
 ;   BDOS = E400h
 ;   BIOS = F200h
 ;   6809 resident service = physical RAM above 10000h
-;   disk workspace        = F9A0h-FBE7h
+;   disk workspace        = F970h-FBE7h
+;   boot type             = FBF5h (0=2D, 1=2HD)
 ;   mailbox               = FBF6h-FBFFh
 ;
 ; Z80 syntax for z80asm.
@@ -15,11 +16,15 @@
 CCPBASE:        equ     0DC00h
 BDOSENT:        equ     0E406h
 BIOSBASE:       equ     0F200h
+BOOTTYPE:       equ     0FBF5h
+BOOT_2D:        equ     00h
+BOOT_2HD:       equ     01h
 
-; CP/M mutable disk workspace is packed directly below the shared mailbox.
-; These addresses do not emit bytes into the BIOS image.
-DIRBUF:         equ     0F9A0h
-CSV0:           equ     0FA20h
+; CP/M mutable disk workspace is packed directly below the shared boot-type
+; byte and mailbox. All eight ALVs reserve the larger 2HD size so logical
+; drive letters can swap controller families according to the boot source.
+DIRBUF:         equ     0F970h
+CSV0:           equ     0F9F0h
 CSV1:           equ     CSV0+32
 CSV2:           equ     CSV1+32
 CSV3:           equ     CSV2+32
@@ -27,11 +32,11 @@ CSV4:           equ     CSV3+32
 CSV5:           equ     CSV4+32
 CSV6:           equ     CSV5+32
 CSV7:           equ     CSV6+32
-ALV0:           equ     0FB20h
-ALV1:           equ     ALV0+19
-ALV2:           equ     ALV1+19
-ALV3:           equ     ALV2+19
-ALV4:           equ     ALV3+19
+ALV0:           equ     0FAF0h
+ALV1:           equ     ALV0+31
+ALV2:           equ     ALV1+31
+ALV3:           equ     ALV2+31
+ALV4:           equ     ALV3+31
 ALV5:           equ     ALV4+31
 ALV6:           equ     ALV5+31
 ALV7:           equ     ALV6+31
@@ -174,8 +179,11 @@ home:
         ld      bc,0
         jp      settrk
 
-; C = CP/M drive number. A:-D: are 2D, E:-H: are 2HD.
-; Returns HL=DPH or HL=0 if unsupported.
+; C = CP/M drive number 0..7.  A:-D: always name the controller family from
+; which CP/M booted; E:-H: name the other family.  BOOTTYPE=0 means
+; A:-D:=2D and E:-H:=2HD. BOOTTYPE=1 reverses those assignments.
+; Returns HL=DPH or HL=0 if unsupported. The selected DPH's DPB pointer is
+; patched on every call so the same logical drive can describe either format.
 seldsk:
         ld      a,c
         cp      8
@@ -189,7 +197,34 @@ seldsk:
         ld      e,(hl)
         inc     hl
         ld      d,(hl)
-        ex      de,hl
+        ex      de,hl           ; HL = selected DPH
+
+        push    hl
+        ld      a,(BOOTTYPE)
+        and     01h             ; 0=2D primary, 1=2HD primary
+        ld      b,a
+        ld      a,c
+        and     04h             ; E:-H: use the opposite controller family
+        jr      z,.have_kind
+        ld      a,b
+        xor     01h
+        jr      .pick_dpb
+.have_kind:
+        ld      a,b
+.pick_dpb:
+        ld      de,dpb2d
+        or      a
+        jr      z,.patch_dpb
+        ld      de,dpb2hd
+.patch_dpb:
+        pop     hl
+        push    hl
+        ld      bc,10           ; DPH+10 = DPB pointer
+        add     hl,bc
+        ld      (hl),e
+        inc     hl
+        ld      (hl),d
+        pop     hl
         ret
 .bad_drive:
         ld      hl,0
@@ -278,7 +313,8 @@ mbox_simple:
 ; DPH / DPB
 ; ----------------------------------------------------------------------
 
-; DPH: XLT, 3 scratch words, DIRBUF, DPB, CSV, ALV
+; DPH: XLT, 3 scratch words, DIRBUF, DPB, CSV, ALV.
+; The DPB field is patched by SELDSK according to BOOTTYPE.
 
 dph0:
         dw      0,0,0,0,DIRBUF,dpb2d,CSV0,ALV0
