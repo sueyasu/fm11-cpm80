@@ -76,9 +76,9 @@ ClearWorkspace
         jmp     IOSERVER_BASE
 
 SystemPayload
-        includebin "build/cpm22/system56.bin"
+        includebin "../build/cpm22/system56.bin"
 SystemPayloadEnd
 
 IoServerPayload
-        includebin "build/6809/ioserver.bin"
+        includebin "../build/6809/ioserver.bin"
 IoServerPayloadEnd
