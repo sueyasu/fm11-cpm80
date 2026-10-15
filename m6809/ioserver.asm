@@ -1,13 +1,14 @@
 * FM-11 resident 6809 I/O service.
 *
-* This code remains resident while CP/M runs on the Z80.  FDC access is
-* owned by the 6809; the Z80 BIOS communicates through the mailbox at the
-* top of Z80-visible RAM and CPU hand-off at FD05.
+* The service is linked at logical $DE00 but no longer resides in Z80 bank-0
+* RAM.  The IPL loads it at physical $10E00 and maps logical $D000-$EFFF to
+* physical $10000-$11FFF through MMR13/MMR14.  The Z80 therefore retains its
+* own independent RAM at $DE00-$EFFF.
 *
 * CPU hand-off is isolated in a small trampoline copied to the FM-11
 * CPU-card fixed SRAM at $FE00.  That SRAM remains visible independently
-* of the MMR, so later remapping of the 6809 address space will not move the
-* hand-off point.  The resident service itself remains at $DE00.
+* of the MMR, so the hand-off point is stable while the private service
+* mapping is active.
 
         include "fm11.inc"
 
@@ -184,9 +185,26 @@ MiniFdcSelect
         sta     MINIFDC_SECTOR
         rts
 
-* Program Mini-FDC DMA channel 0 for a 256-byte transfer at X.
-* Current CP/M 2.2 buffers are all in physical bank 0.
-MiniDmaSetup
+* Program DMA channel 0 for one 256-byte transfer to/from the private
+* I/O-server mapping.  X is a logical address in $D000-$EFFF; adding $3000
+* produces the low 16 bits of its physical $1xxxx address.
+MiniDmaSetupPrivate
+        clr     DMA0_MODE
+        tfr     x,d
+        addd    #IOSERVER_PHYS_DELTA
+        sta     DMA0_ADDR_H
+        stb     DMA0_ADDR_L
+        lda     #$01
+        sta     DMA0_BANK
+        lda     #$01
+        sta     DMA0_COUNT_H
+        clr     DMA0_COUNT_L
+        rts
+
+* Program DMA channel 0 for a physical bank-0 transfer at X.  WBOOT uses
+* this path so CCP+BDOS can be reloaded into physical $C400-$D9FF even while
+* logical page D is mapped to the private 6809 service.
+MiniDmaSetupBank0
         clr     DMA0_MODE
         clr     DMA0_BANK
         tfr     x,d
@@ -197,14 +215,8 @@ MiniDmaSetup
         clr     DMA0_COUNT_L
         rts
 
-* DMA one physical sector from Mini FDC to PhysBuf.
-* X is scratch here; U is preserved for callers such as WarmBootReload.
-MiniFdcReadSector
-        lbsr    MiniFdcSelect
-        lda     MINIFDC_IRQ
-
-        ldx     #PhysBuf
-        lbsr    MiniDmaSetup
+* Start/complete one Mini-FDC physical-sector read after DMA has been set up.
+MiniFdcReadArmed
         lda     #DMA_READ_MODE
         sta     DMA0_MODE
         lda     #FDC_CMD_READSEC
@@ -241,14 +253,31 @@ MfrFailAck
         orcc    #$01
         rts
 
-* DMA PhysBuf as one physical sector to the Mini FDC.
+* DMA one physical sector from Mini FDC to private PhysBuf.
+* X is scratch here; U is preserved for callers such as WarmBootReload.
+MiniFdcReadSector
+        lbsr    MiniFdcSelect
+        lda     MINIFDC_IRQ
+        ldx     #PhysBuf
+        lbsr    MiniDmaSetupPrivate
+        bra     MiniFdcReadArmed
+
+* DMA one physical sector directly to physical bank 0 at WBootDest.
+MiniFdcReadWBoot
+        lbsr    MiniFdcSelect
+        lda     MINIFDC_IRQ
+        ldx     WBootDest
+        lbsr    MiniDmaSetupBank0
+        bra     MiniFdcReadArmed
+
+* DMA private PhysBuf as one physical sector to the Mini FDC.
 * X is scratch; do not consume U so higher-level counters remain intact.
 MiniFdcWriteSector
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
 
         ldx     #PhysBuf
-        lbsr    MiniDmaSetup
+        lbsr    MiniDmaSetupPrivate
         lda     #DMA_WRITE_MODE
         sta     DMA0_MODE
         lda     #FDC_CMD_WRITESEC
@@ -285,7 +314,9 @@ MfwFailAck
         orcc    #$01
         rts
 
-* Warm boot reloads CCP+BDOS from the shared system image.
+* Warm boot reloads CCP+BDOS from the shared system image.  The destination
+* is physical Z80 bank 0, so use FDC DMA directly rather than CPU copying
+* through logical page D, which belongs to the private service mapping.
 WarmBootReload
         clr     MBOX_DRIVE
         clr     PhysTrack
@@ -297,17 +328,11 @@ WarmBootReload
         ldu     #22
 
 WbrSector
-        lbsr    MiniFdcReadSector
+        lbsr    MiniFdcReadWBoot
         bcs     WbrFail
 
-        ldy     #PhysBuf
         ldx     WBootDest
-        clrb
-WbrCopy
-        lda     ,y+
-        sta     ,x+
-        decb
-        bne     WbrCopy
+        leax    256,x
         stx     WBootDest
 
         leau    -1,u
@@ -331,7 +356,9 @@ WbrFail
         orcc    #$01
         rts
 
-* Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
+* Copy the requested 128-byte half of private PhysBuf to the CP/M DMA
+* address.  CP/M 2.2 TPA addresses remain in identity-mapped pages below
+* $D000; the fixed DIRBUF/CSV/ALV workspace remains in identity-mapped F000.
 CopyReadHalfToDma
         ldx     #PhysBuf
         lda     PhysHalf
@@ -348,7 +375,8 @@ CrhLoop
         andcc   #$FE
         rts
 
-* Copy 128 bytes from the CP/M DMA address into the selected half of PhysBuf.
+* Copy 128 bytes from the CP/M DMA address into the selected half of the
+* private PhysBuf.
 CopyDmaToWriteHalf
         ldx     #PhysBuf
         lda     PhysHalf
@@ -367,7 +395,7 @@ CwhLoop
 
 * Runtime copy placed at fixed CPU-card SRAM $FE00.  The CPUCTL write stops
 * the 6809.  When the Z80 later writes CPUCTL=0, the 6809 resumes at the NOP
-* and enters the resident dispatcher through the fixed absolute jump.
+* and enters the private resident dispatcher through the logical $DE00 map.
 TrampolineTemplate
         lda     #$01
         sta     >CPUCTL

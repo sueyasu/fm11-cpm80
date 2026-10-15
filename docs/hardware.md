@@ -4,20 +4,46 @@ This project targets the FM-11 Z80 card as described by hardware analysis and cr
 
 ## Z80 memory view
 
-The Z80 address space is RAM from `0000-FBFF` and I/O from `FC00-FFFF`.
+The Z80 address space is RAM from `0000-FBFF` and memory-mapped I/O from
+`FC00-FFFF`.
 
 The bank register at `$FD2F` affects only the middle 32 KiB window:
 
 - `0000-3FFF`: fixed RAM
 - `4000-BFFF`: banked window, physical `x4000-xBFFF`
 - `C000-FBFF`: fixed RAM
-- `FC00-FFFF`: I/O
+- `FC00-FFFF`: memory-mapped I/O
 
-`x` is selected by the low four bits of `$FD2F`.  This banking model is not yet required by CP/M 2.2 but is retained for a possible CP/M 3 port.
+`x` is selected by the low four bits of `$FD2F`. This banking model is not yet
+required by CP/M 2.2 but is retained for a possible CP/M 3 port.
+
+The shared Z80/6809 mailbox occupies the highest ten bytes of Z80-visible RAM,
+`$FBF6-$FBFF`.
+
+## 6809 private I/O-server memory
+
+The FM-11 main CPU has sixteen 4 KiB MMR entries. CP/M uses hardware task 0 and
+keeps most of that task identity-mapped, but reserves two logical pages for the
+resident I/O service:
+
+```text
+6809 logical        Physical RAM
+$D000-$DFFF   ->    $10000-$10FFF
+$E000-$EFFF   ->    $11000-$11FFF
+```
+
+The service remains linked at logical `$DE00`, so its physical image begins at
+`$10E00`. This places the complete current service outside the Z80's physical
+64 KiB bank-0 memory while avoiding a source-level relocation of its internal
+absolute references.
+
+The CPU-card SRAM at `$FE00-$FFEF` is fixed and is not affected by the MMR. The
+CPU hand-off trampoline is installed at `$FE00`, so control can safely cross
+between Z80 execution and the remapped 6809 service.
 
 ## CPU arbitration
 
-At reset the Z80 is held in WAIT.  The main CPU starts execution.
+At reset the Z80 is held in WAIT. The main CPU starts execution.
 
 - main CPU writes `$FD05` bit 0 = 1: main CPU stops, Z80 starts
 - Z80 writes `$FD05` bit 0 = 0: Z80 stops, main CPU resumes
@@ -33,7 +59,8 @@ The project deliberately uses only interfaces known to be appropriate from the Z
 - standard 8251 serial data/status registers
 - shared memory/status interfaces where documented
 
-FDC and DMA registers are owned by the 6809 service rather than accessed directly by the Z80.
+FDC, DMA and 6809 MMR registers are owned by the main CPU service rather than
+accessed directly by the Z80.
 
 ## Floppy controllers
 
@@ -51,4 +78,4 @@ Bubble memory and HDD support are not part of the initial target.
 
 ## DRAM refresh
 
-While the Z80 is bus master it is responsible for the Z80-side DRAM refresh behaviour.  Normal Z80 instruction execution supplies refresh cycles; emulator accuracy in this area should be checked separately when hardware-faithful execution becomes necessary.
+While the Z80 is bus master it is responsible for the Z80-side DRAM refresh behaviour. Normal Z80 instruction execution supplies refresh cycles; emulator accuracy in this area should be checked separately when hardware-faithful execution becomes necessary.

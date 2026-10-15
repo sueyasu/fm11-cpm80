@@ -25,6 +25,20 @@ MBCMD_WBOOT     equ     $03
 MBSTAT_OK       equ     $00
 MBSTAT_ERROR    equ     $01
 
+* FM-11 4 KiB memory mapper.  CP/M keeps the I/O server linked at logical
+* $DE00, but MMR13/MMR14 map $D000-$EFFF to physical $10000-$11FFF.
+* The server image therefore resides physically at $10E00 while the Z80
+* keeps its independent bank-0 RAM at $DE00.
+MMR_BASE        equ     $FD80
+MMR_TASK        equ     $FD90
+MMR_CTRL        equ     $FD93
+MMR_ENABLE      equ     $80
+MMR_PAGE_D      equ     MMR_BASE+$0D
+MMR_PAGE_E      equ     MMR_BASE+$0E
+IOSERVER_PAGE_D equ     $10
+IOSERVER_PAGE_E equ     $11
+IOSERVER_PHYS_DELTA equ  $3000
+
 * Mini FDC, used by the 2D drives A:-D:.
 MINIFDC         equ     $FD18
 MINIFDC_STATUS  equ     MINIFDC+0      * read status / write command
