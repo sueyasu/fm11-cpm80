@@ -55,3 +55,20 @@ to the CCP at `$C400`.
 The stage-2 load region `$2600-$43FF` is temporary boot storage. The loader is
 position independent and copies its embedded payloads to their final locations
 before transferring control to the resident I/O server.
+
+## Warm boot
+
+The second reserved 2D cylinder contains an exact copy of `system56.bin` at raw
+offset `$2000`. It occupies `$1A00` bytes, corresponding to 26 physical
+256-byte sectors, and maps directly to Z80 `$C400-$DDFF`.
+
+On CP/M WBOOT the Z80 BIOS posts `MBCMD_WBOOT` and hands control to the resident
+6809 I/O server. The 6809 reads drive A:, physical cylinder 1, side 0 sectors
+1-16 followed by side 1 sectors 1-10, and copies them directly to
+`$C400-$DDFF`. This restores CCP, BDOS, and BIOS while the Z80 is stopped.
+
+After the reload completes, the 6809 returns control to the Z80. Because the
+BIOS image is restored with an identical copy, execution resumes safely in the
+BIOS call path. The BIOS then restores the current-drive state from CP/M page
+zero, resets the default DMA address to `$0080`, reinstalls the page-zero WBOOT
+and BDOS vectors, and jumps to the reloaded CCP at `$C400`.

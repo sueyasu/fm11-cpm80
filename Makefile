@@ -63,10 +63,11 @@ $(CPM_BUILD)/system56.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py
 
 image: $(D88_IMAGE)
 
-$(D88_IMAGE): $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/loader.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+$(D88_IMAGE): $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/loader.bin $(CPM_BUILD)/system56.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
 	$(PYTHON) tools/mk2d_d88.py \
 		--ipl $(M6809_BUILD)/ipl_2d.bin \
 		--loader $(M6809_BUILD)/loader.bin \
+		--system $(CPM_BUILD)/system56.bin \
 		--commands $(COMMANDS_DIR) \
 		--output $@ \
 		--raw-output $(RAW_IMAGE) \

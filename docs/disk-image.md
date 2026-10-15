@@ -34,7 +34,8 @@ raw offsets `$0000-$3FFF`.
 ```text
 0000-01FF  stage-1 IPL (ROM loads this to 6809 $0400)
 0200-1FFF  position-independent stage-2 loader.bin and zero padding
-2000-3FFF  reserved/zero-filled second system cylinder
+2000-39FF  warm-boot system56.bin copy (Z80 $C400-$DDFF)
+3A00-3FFF  reserved/zero padding
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
@@ -52,6 +53,12 @@ observed restriction applies to its execution start address.
 The image builder rejects an IPL larger than `$0200` bytes or a stage-2 image
 larger than `$1E00` bytes. This guarantees that the ROM-loaded IPL never needs
 to seek away from track 0.
+
+The second reserved cylinder holds the normal CP/M warm-boot reload image.
+`system56.bin` must be exactly `$1A00` bytes and is written at raw offset
+`$2000`, which is physical cylinder 1, side 0, sector 1. WBOOT reloads the first
+26 physical sectors of that cylinder into Z80 `$C400-$DDFF`, restoring CCP,
+BDOS, and BIOS.
 
 ## Adding CP/M commands
 

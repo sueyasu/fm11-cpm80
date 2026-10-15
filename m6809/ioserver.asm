@@ -80,9 +80,9 @@ ServiceWrite
         bra     ServiceDone
 
 ServiceWBoot
-* System-track reload is intentionally deferred until the on-disk system
-* layout/build process is fixed.  Never claim success before it exists.
-        lda     #MBSTAT_ERROR
+        lbsr    WarmBootReload
+        bcs     ServiceBad
+        lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
 
@@ -279,6 +279,57 @@ MfwFailAck
         rts
 
 * ----------------------------------------------------------------------
+* Warm boot: reload the complete 56K CP/M system image from the reserved
+* copy in physical cylinder 1 of drive A:.  The image is exactly $1A00
+* bytes (26 x 256-byte sectors) and maps directly to Z80 $C400-$DDFF.
+* ----------------------------------------------------------------------
+WarmBootReload
+        clr     MBOX_DRIVE      * warm boot always uses system drive A:
+        lda     #1
+        sta     PhysTrack
+        clr     PhysSide
+        lda     #1
+        sta     PhysSector
+        ldx     #$C400
+        stx     WBootDest
+        ldu     #26
+
+WbrSector
+        lbsr    MiniFdcReadSector
+        bcs     WbrFail
+
+        ldy     #PhysBuf
+        ldx     WBootDest
+        clrb                    * copy all 256 bytes
+WbrCopy
+        lda     ,y+
+        sta     ,x+
+        decb
+        bne     WbrCopy
+        stx     WBootDest
+
+        leau    -1,u
+        cmpu    #0
+        beq     WbrDone
+
+        inc     PhysSector
+        lda     PhysSector
+        cmpa    #17
+        blo     WbrSector
+        lda     #1
+        sta     PhysSector
+        lda     #1
+        sta     PhysSide
+        bra     WbrSector
+
+WbrDone
+        andcc   #$FE
+        rts
+WbrFail
+        orcc    #$01
+        rts
+
+* ----------------------------------------------------------------------
 * Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
 * ----------------------------------------------------------------------
 CopyReadHalfToDma
@@ -321,4 +372,5 @@ PhysSide        rmb     1
 PhysSector      rmb     1
 PhysHalf        rmb     1
 PhysFdcBase     rmb     2
+WBootDest       rmb     2
 PhysBuf         rmb     256

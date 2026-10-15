@@ -14,6 +14,8 @@ SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 STAGE1_SIZE = 0x0200
 BOOT_CYLINDER_SIZE = HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 STAGE2_MAX = BOOT_CYLINDER_SIZE - STAGE1_SIZE
+WBOOT_SYSTEM_OFFSET = BOOT_CYLINDER_SIZE
+WBOOT_SYSTEM_SIZE = 0x1A00
 
 BLOCK_SIZE = 2048
 TOTAL_BLOCKS = 152          # DPB DSM=151 -> blocks 0..151
@@ -126,7 +128,7 @@ def write_cpm_files(raw: bytearray, files):
             next_dir += 1
 
 
-def make_raw(ipl: bytes, loader: bytes, files):
+def make_raw(ipl: bytes, loader: bytes, system: bytes, files):
     if len(ipl) > STAGE1_SIZE:
         raise ValueError(
             f"ipl_2d.bin is {len(ipl)} bytes; maximum is {STAGE1_SIZE}")
@@ -134,16 +136,21 @@ def make_raw(ipl: bytes, loader: bytes, files):
         raise ValueError(
             f"loader.bin is {len(loader)} bytes; maximum is {STAGE2_MAX} "
             f"bytes so stage 1 can load it without leaving cylinder 0")
+    if len(system) != WBOOT_SYSTEM_SIZE:
+        raise ValueError(
+            f"system56.bin is {len(system)} bytes; expected exactly "
+            f"{WBOOT_SYSTEM_SIZE} bytes")
 
     raw = bytearray(b"\xe5" * RAW_SIZE)
 
     # OFF=2 reserves the first two cylinders as a 16 KiB system area.
-    # FM-11 ROM loads its first 512 bytes (T0/H0/S1-S2) to $0400.
-    # Stage 1 loads only the remaining 30 sectors of cylinder 0 to $4000.
-    # Cylinder 1 remains reserved/zero-filled for future system use.
+    # Cylinder 0 contains the ROM-loaded IPL and position-independent stage 2.
+    # Cylinder 1 contains an exact 0x1A00-byte CCP+BDOS+BIOS image used by
+    # the normal CP/M WBOOT path to restore Z80 $C400-$DDFF.
     raw[:SYSTEM_SIZE] = b"\x00" * SYSTEM_SIZE
     raw[:len(ipl)] = ipl
     raw[STAGE1_SIZE:STAGE1_SIZE + len(loader)] = loader
+    raw[WBOOT_SYSTEM_OFFSET:WBOOT_SYSTEM_OFFSET + len(system)] = system
 
     raw[SYSTEM_SIZE:SYSTEM_SIZE + DIR_SIZE] = b"\xe5" * DIR_SIZE
     write_cpm_files(raw, files)
@@ -197,6 +204,7 @@ def main():
     ap = argparse.ArgumentParser(description="Build an FM-11 CP/M-80 2D D88 image")
     ap.add_argument("--ipl", required=True, type=Path)
     ap.add_argument("--loader", required=True, type=Path)
+    ap.add_argument("--system", required=True, type=Path)
     ap.add_argument("--commands", required=True, type=Path)
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--raw-output", type=Path)
@@ -205,8 +213,9 @@ def main():
 
     ipl = args.ipl.read_bytes()
     loader = args.loader.read_bytes()
+    system = args.system.read_bytes()
     files = command_files(args.commands)
-    raw = make_raw(ipl, loader, files)
+    raw = make_raw(ipl, loader, system, files)
     d88 = make_d88(raw, args.label)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -218,6 +227,7 @@ def main():
     print(f"{args.output}: {len(d88)} bytes, {len(files)} command file(s)")
     print(f"stage1: raw offset 0x0000, {len(ipl)} bytes")
     print(f"stage2: raw offset 0x{STAGE1_SIZE:04x}, {len(loader)} bytes")
+    print(f"wboot system: raw offset 0x{WBOOT_SYSTEM_OFFSET:04x}, {len(system)} bytes")
     for path in files:
         print(f"  {path.name}")
 

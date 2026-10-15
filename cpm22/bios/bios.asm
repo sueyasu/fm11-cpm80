@@ -71,11 +71,20 @@ boot:
         call    setvec
         jp      CCPBASE
 
+; Reload CCP+BDOS+BIOS from the reserved warm-boot copy on A: system tracks.
+; The 6809 performs the physical I/O while the Z80 is stopped.  The BIOS
+; code being executed is replaced by an identical copy, so execution safely
+; resumes at the instruction following the CPU hand-off.
 wboot:
         ld      a,MBCMD_WBOOT
         call    mbox_simple
         or      a
-        jr      nz,wboot        ; warm boot loader not implemented yet
+        jr      nz,wboot        ; retry on media/FDC error
+
+        ld      a,(0004h)       ; preserve CP/M current drive across reload
+        ld      (curdrv),a
+        ld      hl,0080h
+        ld      (curdma),hl
         call    setvec
         jp      CCPBASE
 
