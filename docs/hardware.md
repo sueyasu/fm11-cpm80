@@ -32,11 +32,19 @@ $E000-$EFFF   ->    $10000-$10FFF
 
 The I/O server is linked at logical `$E000` and loaded at physical `$10000`.
 The complete current service is limited to `$0400` bytes, so it fits entirely
-inside this one private page.
+inside this one private page. The private page also contains the 256-byte
+blocking/deblocking buffer.
 
-Keeping logical page D identity-mapped is intentional. The 62K CP/M TPA extends
-through `$DBFF`, so CP/M DMA buffers in the upper TPA remain directly accessible
-to the 6809 service without a temporary MMR remap.
+Logical page D (`$D000-$DFFF`) is reserved as a temporary 6809 window onto Z80
+physical bank-0 RAM. When a CP/M disk call supplies a 16-bit DMA address, the
+I/O server interprets it as a physical address in `$00000-$0FBFF`, maps the
+containing 4 KiB physical page into MMR13, and accesses it through `$D000-$DFFF`.
+The previous MMR13 value is saved and restored around each copy. A 128-byte
+logical record that crosses a 4 KiB boundary is copied in two mapped segments.
+
+This window exists only in the 6809 logical address space. The Z80 memory map is
+unchanged, so CP/M applications can use DMA buffers in TPA, CCP/BDOS, or other
+RAM without depending on the 6809 service mapping.
 
 The CPU-card SRAM at `$FE00-$FFEF` is fixed and is not affected by the MMR. The
 CPU hand-off trampoline is installed at `$FE00`, so control can safely cross

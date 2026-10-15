@@ -70,9 +70,17 @@ hardware task 0 as an identity map and changes only MMR14:
 $E000-$EFFF   ->    $10000-$10FFF   (MMR14 = $10)
 ```
 
-Logical page `$D000-$DFFF` remains identity-mapped. This matters because the
-62K TPA extends through `$DBFF`; CP/M DMA buffers in the upper TPA therefore
-remain directly accessible to the 6809 I/O service.
+Logical page `$D000-$DFFF` is reserved as a temporary 6809 window onto Z80
+physical bank-0 RAM. For each normal CP/M READ/WRITE, the 16-bit DMA address in
+the mailbox selects the physical 4 KiB page loaded into MMR13; the record is
+then copied through `$D000-$DFFF` between the Z80 buffer and the private
+256-byte blocking/deblocking buffer. The previous MMR13 value is restored after
+the copy, and a 128-byte record crossing a 4 KiB boundary advances the window
+to the next physical page.
+
+This means Z80 DMA buffers can reside anywhere in usable bank-0 RAM, including
+TPA, CCP/BDOS, BIOS-adjacent RAM, or the high CP/M workspace, without depending
+on the 6809 logical mapping at that address.
 
 The MMR is disabled while the task-0 register set is initialized. The IPL
 preserves the non-MMU control bits in `$FD93`, enables translation after the

@@ -2,9 +2,11 @@
 *
 * The service is linked at logical $E000 but does not reside in Z80 bank-0
 * RAM.  The IPL loads it at physical $10000 and maps logical $E000-$EFFF to
-* physical $10000-$10FFF through MMR14.  Logical page D remains identity-
-* mapped so 62K CP/M can use TPA through $DBFF without special DMA-buffer
-* mapping.
+* physical $10000-$10FFF through MMR14.
+*
+* Logical page D is reserved as a temporary 6809 window onto arbitrary Z80
+* physical bank-0 pages.  CP/M DMA buffers are therefore accessed by physical
+* address rather than by assuming the current 6809 logical map matches Z80.
 *
 * CPU hand-off is isolated in a small trampoline copied to the FM-11
 * CPU-card fixed SRAM at $FE00.  That SRAM remains visible independently
@@ -110,6 +112,18 @@ ValidateDiskRequest
         andcc   #$FE
         rts
 VdrBad
+        orcc    #$01
+        rts
+
+* A CP/M logical record is 128 bytes.  Reject a DMA address whose complete
+* record would extend beyond the last Z80 RAM byte at $FBFF.
+ValidateDmaRange
+        ldd     MBOX_DMA_H
+        cmpd    #$FB80
+        bhi     VdmBad
+        andcc   #$FE
+        rts
+VdmBad
         orcc    #$01
         rts
 
@@ -357,41 +371,98 @@ WbrFail
         orcc    #$01
         rts
 
+* Map the physical Z80 bank-0 page containing MBOX_DMA into logical page D.
+* Returns Y = $D000 + the original 12-bit DMA offset.  The original MMR13
+* value is saved so callers can restore the exact pre-call mapping.
+MapZ80DmaWindow
+        lda     MMR_PAGE_D
+        sta     SavedMmrD
+        ldy     MBOX_DMA_H
+        tfr     y,d
+        lsra
+        lsra
+        lsra
+        lsra
+        sta     Z80Page
+        sta     MMR_PAGE_D
+        tfr     y,d
+        anda    #$0F
+        ora     #$D0
+        tfr     d,y
+        rts
+
+RestoreZ80Window
+        lda     SavedMmrD
+        sta     MMR_PAGE_D
+        rts
+
 * Copy the requested 128-byte half of private PhysBuf to the CP/M DMA
-* address.  The 62K TPA through $DBFF and the high workspace at $F9A0 are
-* identity-mapped for the 6809 because only logical page E is private.
+* address.  MMR13 is a temporary window onto Z80 physical bank-0 RAM, so the
+* copy remains correct even when the DMA buffer lies in BDOS or other pages
+* not visible at the same logical address to the 6809.  A 4 KiB crossing is
+* handled by advancing the physical page and restarting the D-window at $D000.
 CopyReadHalfToDma
+        lbsr    ValidateDmaRange
+        bcs     CrhBad
+        lbsr    MapZ80DmaWindow
+
         ldx     #PhysBuf
         lda     PhysHalf
         beq     CrhSourceReady
         leax    128,x
 CrhSourceReady
-        ldy     MBOX_DMA_H
         ldb     #128
 CrhLoop
         lda     ,x+
         sta     ,y+
         decb
+        beq     CrhDone
+        cmpy    #Z80_WINDOW_END
         bne     CrhLoop
+        inc     Z80Page
+        lda     Z80Page
+        sta     MMR_PAGE_D
+        ldy     #Z80_WINDOW_BASE
+        bra     CrhLoop
+CrhDone
+        lbsr    RestoreZ80Window
         andcc   #$FE
         rts
+CrhBad
+        orcc    #$01
+        rts
 
-* Copy 128 bytes from the CP/M DMA address into the selected half of the
-* private PhysBuf.
+* Copy 128 bytes from the CP/M DMA address into the selected half of private
+* PhysBuf using the same temporary physical-memory window.
 CopyDmaToWriteHalf
+        lbsr    ValidateDmaRange
+        bcs     CwhBad
+        lbsr    MapZ80DmaWindow
+
         ldx     #PhysBuf
         lda     PhysHalf
         beq     CwhDestReady
         leax    128,x
 CwhDestReady
-        ldy     MBOX_DMA_H
         ldb     #128
 CwhLoop
         lda     ,y+
         sta     ,x+
         decb
+        beq     CwhDone
+        cmpy    #Z80_WINDOW_END
         bne     CwhLoop
+        inc     Z80Page
+        lda     Z80Page
+        sta     MMR_PAGE_D
+        ldy     #Z80_WINDOW_BASE
+        bra     CwhLoop
+CwhDone
+        lbsr    RestoreZ80Window
         andcc   #$FE
+        rts
+CwhBad
+        orcc    #$01
         rts
 
 * Runtime copy placed at fixed CPU-card SRAM $FE00.  The CPUCTL write stops
@@ -410,4 +481,6 @@ PhysSector      rmb     1
 PhysHalf        rmb     1
 PhysFdcBase     rmb     2
 WBootDest       rmb     2
+SavedMmrD       rmb     1
+Z80Page         rmb     1
 PhysBuf         rmb     256
