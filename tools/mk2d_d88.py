@@ -11,12 +11,12 @@ RAW_SIZE = CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 
 SYSTEM_CYLINDERS = 2
 SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
+CYLINDER_SIZE = HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 IPL_SIZE = 0x0200
-CPM_SYSTEM_OFFSET = IPL_SIZE
-CPM_SYSTEM_SIZE = 0x1A00
-IOSERVER_OFFSET = CPM_SYSTEM_OFFSET + CPM_SYSTEM_SIZE
+IOSERVER_OFFSET = IPL_SIZE
 IOSERVER_SLOT_SIZE = 0x0800
-DIRECT_LOAD_END = IOSERVER_OFFSET + IOSERVER_SLOT_SIZE
+CPM_SYSTEM_OFFSET = CYLINDER_SIZE
+CPM_SYSTEM_SIZE = 0x1A00
 
 BLOCK_SIZE = 2048
 TOTAL_BLOCKS = 152          # DPB DSM=151 -> blocks 0..151
@@ -141,21 +141,25 @@ def make_raw(ipl: bytes, system: bytes, ioserver: bytes, files):
         raise ValueError(
             f"ioserver.bin is {len(ioserver)} bytes; maximum is "
             f"{IOSERVER_SLOT_SIZE} bytes")
-    if DIRECT_LOAD_END > SYSTEM_SIZE:
-        raise ValueError("internal direct-load layout exceeds OFF=2 reservation")
+    if IOSERVER_OFFSET + IOSERVER_SLOT_SIZE > CYLINDER_SIZE:
+        raise ValueError("internal I/O-server slot exceeds cylinder 0")
+    if CPM_SYSTEM_OFFSET + CPM_SYSTEM_SIZE > SYSTEM_SIZE:
+        raise ValueError("internal CP/M system image exceeds cylinder 1")
 
     raw = bytearray(b"\xe5" * RAW_SIZE)
 
-    # OFF=2 reserves the first two cylinders as a 16 KiB system area.
-    # The ROM loads the first 512 bytes to $0400. The IPL then reads:
-    #   $0200-$1BFF  system62.bin -> Z80 physical $DC00-$F5FF
-    #   $1C00-$23FF  I/O server slot -> 6809 physical $10000-$107FF
-    # The I/O-server slot crosses from T0/H1/S16 to T1/H0/S1 and ends at S4.
-    # The rest of cylinder 1 remains reserved and zero-filled.
+    # OFF=2 reserves cylinders 0 and 1 as a 16 KiB system area.
+    # Cylinder 0 is exclusively the 6809 boot environment:
+    #   $0000-$01FF  ROM-loaded IPL
+    #   $0200-$09FF  resident I/O-server slot (up to $0800 bytes)
+    # Cylinder 1 contains the single CP/M system image:
+    #   $2000-$39FF  system62.bin -> Z80 physical $DC00-$F5FF
+    # The IPL never seeks away from cylinder 0; the resident I/O server loads
+    # cylinder 1 after its private mapping is active.
     raw[:SYSTEM_SIZE] = b"\x00" * SYSTEM_SIZE
     raw[:len(ipl)] = ipl
-    raw[CPM_SYSTEM_OFFSET:CPM_SYSTEM_OFFSET + len(system)] = system
     raw[IOSERVER_OFFSET:IOSERVER_OFFSET + len(ioserver)] = ioserver
+    raw[CPM_SYSTEM_OFFSET:CPM_SYSTEM_OFFSET + len(system)] = system
 
     raw[SYSTEM_SIZE:SYSTEM_SIZE + DIR_SIZE] = b"\xe5" * DIR_SIZE
     write_cpm_files(raw, files)
@@ -231,8 +235,8 @@ def main():
 
     print(f"{args.output}: {len(d88)} bytes, {len(files)} command file(s)")
     print(f"ipl: raw offset 0x0000, {len(ipl)} bytes")
-    print(f"CP/M system: raw offset 0x{CPM_SYSTEM_OFFSET:04x}, {len(system)} bytes")
     print(f"I/O server: raw offset 0x{IOSERVER_OFFSET:04x}, {len(ioserver)} bytes")
+    print(f"CP/M system: raw offset 0x{CPM_SYSTEM_OFFSET:04x}, {len(system)} bytes")
     for path in files:
         print(f"  {path.name}")
 

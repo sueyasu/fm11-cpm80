@@ -47,10 +47,13 @@ MINIFDC_TRACK   equ     MINIFDC+1
 MINIFDC_SECTOR  equ     MINIFDC+2
 MINIFDC_DATA    equ     MINIFDC+3
 MINIFDC_SIDE    equ     MINIFDC+4      * bit 0 = side
-MINIFDC_DRIVE   equ     MINIFDC+5      * bits 0-1 = drive
+MINIFDC_DRIVE   equ     MINIFDC+5      * bits 0-1 = drive, bit 7 = motor
 MINIFDC_AUX     equ     MINIFDC+6
 MINIFDC_IRQ     equ     MINIFDC+7      * read acknowledges FDC IRQ
+MINIFDC_MOTOR   equ     $80
 
+FDC_CMD_RESTORE equ     $0B            * head load, slowest step rate
+FDC_CMD_SEEK    equ     $1B            * head load, slowest step rate
 FDC_CMD_READSEC equ     $80
 FDC_CMD_WRITESEC equ    $A0
 FDC_ST_BUSY     equ     $01
@@ -61,6 +64,7 @@ FDC_ST_RNF      equ     $10
 FDC_ST_WRFAULT  equ     $20
 FDC_ST_WRPROT   equ     $40
 FDC_ST_NOTRDY   equ     $80
+FDC_SEEKERR     equ     FDC_ST_RNF+FDC_ST_NOTRDY
 FDC_READERR     equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_NOTRDY
 FDC_WRITEERR    equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_WRFAULT+FDC_ST_WRPROT+FDC_ST_NOTRDY
 

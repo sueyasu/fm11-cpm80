@@ -40,35 +40,30 @@ The active system layout is:
 
 ```text
 0000-01FF  IPL (ROM loads this to 6809 $0400)
-0200-1BFF  system62.bin -> Z80 physical $DC00-$F5FF
-1C00-1FFF  6809 I/O-server slot -> physical $10000-$103FF
-2000-3FFF  reserved/zero padding
+0200-09FF  6809 I/O-server slot -> physical $10000-$107FF
+0A00-1FFF  reserved/zero padding
+2000-39FF  system62.bin -> Z80 physical $DC00-$F5FF
+3A00-3FFF  reserved/zero padding
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
 
+Cylinder 0 is therefore exclusively the 6809 boot environment. The ROM-loaded
+IPL stays on cylinder 0 and loads only T0/H0/S3-S10, the eight-sector I/O-server
+slot. The IPL never performs a SEEK or STEP.
+
+After the resident I/O server is running from private RAM, it initializes the
+Mini FDC, moves to cylinder 1, and loads `system62.bin` from T1/H0/S1 onward.
 `system62.bin` is exactly `$1A00` bytes: `$1600` bytes of CCP+BDOS followed by
-a BIOS slot padded to `$0400` bytes. The I/O-server disk slot is `$0400` bytes.
-Together they occupy exactly the 30 sectors remaining on cylinder 0 after the
-ROM-loaded IPL sectors:
+a BIOS slot padded to `$0400` bytes.
 
-```text
-T0/H0/S3-S16
-T0/H1/S1-S16
-```
-
-The IPL loads the first 26 sectors to Z80 physical bank 0 at `$DC00`, then
-loads the final four sectors through DMA bank 1 to physical `$10000`. No SEEK
-or STEP is required during cold boot.
-
-There is no stage-2 loader and no separate warm-boot copy of the CP/M system.
-WBOOT reuses the same system image and reloads only CCP+BDOS (`$1600` bytes,
-22 physical sectors) from raw `$0200-$17FF` directly to Z80 physical
-`$DC00-$F1FF`. BIOS at `$F200-$F5FF` and the private 6809 I/O server remain
-resident.
+Cold boot reads all 26 physical sectors from the cylinder-1 image to Z80
+physical `$DC00-$F5FF`. WBOOT uses the same image and reads only the first 22
+physical sectors to restore CCP+BDOS at `$DC00-$F1FF`; BIOS remains resident.
+There is no duplicate warm-boot system copy.
 
 The 2D image builder rejects an IPL larger than `$0200`, a system payload whose
-size is not exactly `$1A00`, or an I/O server larger than `$0400`.
+size is not exactly `$1A00`, or an I/O server larger than `$0800`.
 
 The 2D DPB is:
 

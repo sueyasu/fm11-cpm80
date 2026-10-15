@@ -1,7 +1,7 @@
 # Cold boot
 
-The FM-11 2D boot path uses a single ROM-loaded MC6809 IPL. There is no
-second-stage loader.
+The FM-11 2D boot path uses a ROM-loaded MC6809 IPL followed by the resident
+MC6809 I/O server.  The key rule is that the IPL itself never leaves cylinder 0.
 
 ## ROM-loaded IPL
 
@@ -9,42 +9,47 @@ second-stage loader.
 The FM-11 ROM IPL loads physical sectors T0/H0/S1-S2 (2 x 256 bytes) to `$0400`
 and transfers control there.
 
-The IPL uses `$2000` as its stack, selects 2D drive 0, and DMA-loads the on-disk
-system components directly to their final physical RAM locations. Mini FDC
-transfers use DMA channel 0:
-
-```text
-$FD40/$FD41  DMA address H/L
-$FD42/$FD43  DMA byte count H/L
-$FD50        DMA mode/status
-$FD94        DMA physical-address bank (PA19-16)
-```
-
-The direct-load disk stream still occupies the 30 sectors remaining on
-cylinder 0, but its two components use different physical DMA banks:
+The IPL then reads only T0/H0/S3-S10, using DMA channel 0, and places the
+complete resident I/O server in private physical RAM:
 
 ```text
 Disk raw        Physical RAM       Contents
-$0200-$1BFF ->  $0DC00-$0F5FF      CCP + BDOS + BIOS (`system62.bin`)
-$1C00-$1FFF ->  $10000-$103FF      resident 6809 I/O-server slot
+$0200-$09FF ->  $10000-$107FF      I/O-server slot (maximum $0800)
 ```
 
-`system62.bin` occupies 26 physical sectors. The resident I/O server is limited
-to `$0400` bytes, so the complete disk stream remains:
+No SEEK or STEP operation is issued by the IPL.  After the load it initializes
+the task-0 MMR map, maps logical `$E000-$EFFF` to physical `$10000-$10FFF`, and
+jumps to the I/O server at `$E000`.
+
+## Cylinder-1 CP/M system image
+
+Cylinder 1 contains the one and only CP/M system image:
 
 ```text
-T0/H0/S3-S16
-T0/H1/S1-S16
+Disk raw        Z80 physical RAM   Contents
+$2000-$35FF ->  $DC00-$F1FF        CCP + BDOS ($1600)
+$3600-$39FF ->  $F200-$F5FF        BIOS slot ($0400)
 ```
 
-No SEEK or STEP operation is issued by the IPL.
+The complete `system62.bin` is therefore `$1A00` bytes, or 26 physical
+256-byte sectors, beginning at T1/H0/S1.
+
+The first operation performed by the resident I/O server during cold boot is to
+establish a known Mini-FDC position with RESTORE followed by SEEK to cylinder 1.
+Only after the IPL boot phase has ended does the system perform this first
+cylinder change.  The I/O server then DMA-loads all 26 sectors directly to Z80
+physical bank 0 at `$DC00-$F5FF`.
+
+After the CP/M system is resident, the I/O server clears the mutable disk
+workspace, installs `JP $F200` at Z80 reset address `$0000`, and releases the
+Z80 through the fixed-SRAM trampoline.
 
 ## 62K CP/M layout
 
 The Z80 system uses the conventional 62K CP/M 2.2 placement:
 
 ```text
-$0100-$DBFF   TPA (55 KiB)
+$0100-$DBFF   TPA (54.75 KiB)
 $DC00-$E3FF   CCP
 $E400-$F1FF   BDOS
 $F200-$F5FF   BIOS slot
@@ -55,15 +60,14 @@ $FC00-$FFFF   memory-mapped I/O
 ```
 
 The build takes the relocated CCP+BDOS image from
-`external/cpm22/ccpbdos62.bin`. The BIOS is assembled at `$F200` and the
-combined system payload remains exactly `$1A00` bytes, so the disk sector
-layout does not change.
+`external/cpm22/ccpbdos62.bin`. The BIOS is assembled at `$F200`, and the
+combined system payload is exactly `$1A00` bytes.
 
 ## 6809 private mapping
 
-The current I/O server fits in one 4 KiB page. It is linked at logical `$E000`
-and loaded at physical `$10000`. Before entering it, the IPL initializes
-hardware task 0 as an identity map and changes only MMR14:
+The I/O server is linked at logical `$E000` and loaded at physical `$10000`.
+Before entering it, the IPL initializes hardware task 0 as an identity map and
+changes only MMR14:
 
 ```text
 6809 logical        Physical RAM
@@ -78,17 +82,9 @@ then copied through `$D000-$DFFF` between the Z80 buffer and the private
 the copy, and a 128-byte record crossing a 4 KiB boundary advances the window
 to the next physical page.
 
-This means Z80 DMA buffers can reside anywhere in usable bank-0 RAM, including
-TPA, CCP/BDOS, BIOS-adjacent RAM, or the high CP/M workspace, without depending
-on the 6809 logical mapping at that address.
-
-The MMR is disabled while the task-0 register set is initialized. The IPL
-preserves the non-MMU control bits in `$FD93`, enables translation after the
-mapping is complete, and then jumps to logical `$E000`.
-
-`IoServerStart` copies the CPU hand-off trampoline to fixed CPU-card SRAM at
-`$FE00`. This fixed SRAM remains visible independently of the MMR. The shared
-Z80/6809 mailbox occupies `$FBF6-$FBFF`, the top ten bytes of Z80-visible RAM.
+The CPU hand-off trampoline is copied to fixed CPU-card SRAM at `$FE00`. This
+SRAM remains visible independently of the MMR. The shared Z80/6809 mailbox
+occupies `$FBF6-$FBFF`.
 
 The CP/M mutable disk workspace is packed directly below the mailbox:
 
@@ -100,25 +96,17 @@ $FBE8-$FBF5   reserved / free
 $FBF6-$FBFF   mailbox
 ```
 
-The IPL clears `$F9A0-$FBE7` during cold boot, installs `JP $F200` at Z80 reset
-address `$0000`, and enters the private I/O server. The server hands control to
-the Z80 through the fixed-SRAM trampoline; the Z80 starts at `$0000`, jumps to
-BIOS at `$F200`, and continues to the CCP at `$DC00`.
-
 ## Warm boot
 
-Cold boot and warm boot share the same single on-disk CP/M system image. There
-is no second copy of `system62.bin` in cylinder 1.
+Cold boot and warm boot use the same cylinder-1 system image; there is no
+second CP/M system copy.
 
-On CP/M WBOOT the Z80 BIOS posts `MBCMD_WBOOT` and hands control to the private
-6809 I/O server. The server reloads only CCP+BDOS, exactly `$1600` bytes
-(22 physical sectors), from T0/H0/S3 onward.
+On WBOOT, the Z80 BIOS posts `MBCMD_WBOOT` and hands control to the private
+6809 I/O server. The server re-establishes cylinder 1 and reloads only the first
+22 physical sectors, exactly CCP+BDOS (`$1600` bytes), from T1/H0/S1 onward to
+Z80 physical `$DC00-$F1FF`.
 
-Because logical page `$E000-$EFFF` belongs to the private I/O-server mapping
-while the 6809 runs, WBOOT uses the Mini FDC DMA engine to write the system
-sectors directly to physical Z80 bank 0 at `$DC00-$F1FF`. BIOS at physical
-`$F200-$F5FF` is not reloaded.
-
-After the reload completes, the BIOS restores current-drive state from CP/M
-page zero, resets the default DMA address to `$0080`, reinstalls the page-zero
-WBOOT and BDOS vectors, and jumps to the reloaded CCP at `$DC00`.
+BIOS at `$F200-$F5FF` remains resident while the service call is in progress.
+After the reload completes, the BIOS restores current-drive state, resets the
+default DMA address to `$0080`, reinstalls the page-zero WBOOT and BDOS vectors,
+and jumps to the reloaded CCP at `$DC00`.

@@ -16,6 +16,12 @@
         include "fm11.inc"
 
 TRAMPOLINE_BASE equ    $FE00
+CPM_SYSTEM_DEST equ    $DC00
+CPM_SYSTEM_SECTORS equ 26
+CPM_WBOOT_SECTORS equ  22
+CPM_WORK_BASE   equ    $F9A0
+CPM_WORK_LEN    equ    $0248
+SYSTEM_TRACK    equ    1
 
         org     $E000
 
@@ -34,8 +40,39 @@ InstallTrampoline
         decb
         bne     InstallTrampoline
 
-* Initial cold-boot hand-off uses the same path as all later service calls.
+* The ROM-loaded IPL intentionally stays on cylinder 0.  Once the complete
+* resident service is running from private RAM, initialize the Mini FDC and
+* load the single CP/M system image from cylinder 1.
+        lbsr    ColdBootLoadSystem
+        bcs     ColdBootFail
+
+* Clear mutable CP/M disk workspace after the system image is resident.
+        ldx     #CPM_WORK_BASE
+        ldu     #CPM_WORK_LEN
+        clra
+ColdClearWorkspace
+        sta     ,x+
+        leau    -1,u
+        cmpu    #0
+        bne     ColdClearWorkspace
+
+* Z80 is released from WAIT with PC=0000. Install JP $F200 and clear the
+* following page-zero bytes used by the initial cold entry.
+        lda     #$C3
+        sta     >$0000
+        ldd     #$00F2
+        std     >$0001
+        clra
+        sta     >$0003
+        sta     >$0004
+        clr     MBOX_CMD
+        clr     MBOX_STATUS
+
+* Initial cold-boot hand-off uses the same fixed-SRAM path as later calls.
         jmp     TRAMPOLINE_BASE
+
+ColdBootFail
+        bra     ColdBootFail
 
 ServiceLoop
         ldb     MBOX_CMD
@@ -189,6 +226,7 @@ DlsBad
 MiniFdcSelect
         lda     MBOX_DRIVE
         anda    #$03
+        ora     #MINIFDC_MOTOR
         sta     MINIFDC_DRIVE
 
         lda     PhysSide
@@ -198,6 +236,58 @@ MiniFdcSelect
         sta     MINIFDC_TRACK
         lda     PhysSector
         sta     MINIFDC_SECTOR
+        rts
+
+* Wait for a Mini-FDC type-I command to finish.  During BUSY only bit 0 is
+* interpreted; seek/not-ready status is checked after command completion.
+MiniFdcWaitType1
+        ldx     #$FFFF
+MftWait
+        lda     MINIFDC_STATUS
+        bita    #FDC_ST_BUSY
+        beq     MftDone
+        leax    -1,x
+        cmpx    #0
+        bne     MftWait
+        bra     MftFail
+MftDone
+        bita    #FDC_SEEKERR
+        bne     MftFail
+        lda     MINIFDC_IRQ
+        andcc   #$FE
+        rts
+MftFail
+        lda     MINIFDC_IRQ
+        orcc    #$01
+        rts
+
+* Establish a known physical head position before reading the system image.
+* This is deliberately done here, after the ROM/IPL boot phase has ended.
+MiniFdcPrepareSystemTrack
+        lda     #MINIFDC_MOTOR
+        sta     MINIFDC_DRIVE
+        clr     MINIFDC_SIDE
+        lda     MINIFDC_IRQ
+
+        lda     #FDC_CMD_RESTORE
+        sta     MINIFDC_STATUS
+        lbsr    MiniFdcWaitType1
+        bcs     MfpFail
+
+        lda     #SYSTEM_TRACK
+        sta     MINIFDC_DATA
+        lda     #FDC_CMD_SEEK
+        sta     MINIFDC_STATUS
+        lbsr    MiniFdcWaitType1
+        bcs     MfpFail
+
+        lda     MINIFDC_TRACK
+        cmpa    #SYSTEM_TRACK
+        bne     MfpFail
+        andcc   #$FE
+        rts
+MfpFail
+        orcc    #$01
         rts
 
 * Program DMA channel 0 for one 256-byte transfer to/from the private
@@ -216,9 +306,8 @@ MiniDmaSetupPrivate
         clr     DMA0_COUNT_L
         rts
 
-* Program DMA channel 0 for a physical bank-0 transfer at X.  WBOOT uses
-* this path so CCP+BDOS can be reloaded into physical $DC00-$F1FF even while
-* logical page E is mapped to the private 6809 service.
+* Program DMA channel 0 for a physical bank-0 transfer at X.  Cold boot and
+* WBOOT use this path for the CP/M system image at $DC00-$F5FF.
 MiniDmaSetupBank0
         clr     DMA0_MODE
         clr     DMA0_BANK
@@ -329,41 +418,78 @@ MfwFailAck
         orcc    #$01
         rts
 
-* Warm boot reloads CCP+BDOS from the shared system image.  The destination
-* is physical Z80 bank 0, so use FDC DMA directly rather than CPU copying
-* through logical page E, which belongs to the private service mapping.
-WarmBootReload
-        clr     MBOX_DRIVE
-        clr     PhysTrack
-        clr     PhysSide
-        lda     #3
-        sta     PhysSector
-        ldx     #$DC00
-        stx     WBootDest
-        ldu     #22
-
-WbrSector
-        lbsr    MiniFdcReadWBoot
-        bcs     WbrFail
-
-        ldx     WBootDest
-        leax    256,x
-        stx     WBootDest
-
-        leau    -1,u
-        cmpu    #0
-        beq     WbrDone
-
+* Advance within cylinder 1, whose 2D system image starts at H0/S1.
+AdvanceSystemSector
         inc     PhysSector
         lda     PhysSector
         cmpa    #17
-        blo     WbrSector
+        blo     AssDone
         lda     #1
         sta     PhysSector
         lda     #1
         sta     PhysSide
-        bra     WbrSector
+AssDone
+        rts
 
+* Cold boot loads the one on-disk system62 image from cylinder 1.  It reads
+* all 26 physical sectors: CCP+BDOS ($1600) followed by BIOS ($0400).
+ColdBootLoadSystem
+        lbsr    MiniFdcPrepareSystemTrack
+        bcs     CblFail
+        clr     MBOX_DRIVE
+        lda     #SYSTEM_TRACK
+        sta     PhysTrack
+        clr     PhysSide
+        lda     #1
+        sta     PhysSector
+        ldx     #CPM_SYSTEM_DEST
+        stx     WBootDest
+        ldu     #CPM_SYSTEM_SECTORS
+
+CblSector
+        lbsr    MiniFdcReadWBoot
+        bcs     CblFail
+        ldx     WBootDest
+        leax    256,x
+        stx     WBootDest
+        leau    -1,u
+        cmpu    #0
+        beq     CblDone
+        lbsr    AdvanceSystemSector
+        bra     CblSector
+CblDone
+        andcc   #$FE
+        rts
+CblFail
+        orcc    #$01
+        rts
+
+* Warm boot uses the same cylinder-1 system image but reloads only CCP+BDOS.
+* BIOS remains resident while the service call is in progress.
+WarmBootReload
+        lbsr    MiniFdcPrepareSystemTrack
+        bcs     WbrFail
+        clr     MBOX_DRIVE
+        lda     #SYSTEM_TRACK
+        sta     PhysTrack
+        clr     PhysSide
+        lda     #1
+        sta     PhysSector
+        ldx     #CPM_SYSTEM_DEST
+        stx     WBootDest
+        ldu     #CPM_WBOOT_SECTORS
+
+WbrSector
+        lbsr    MiniFdcReadWBoot
+        bcs     WbrFail
+        ldx     WBootDest
+        leax    256,x
+        stx     WBootDest
+        leau    -1,u
+        cmpu    #0
+        beq     WbrDone
+        lbsr    AdvanceSystemSector
+        bra     WbrSector
 WbrDone
         andcc   #$FE
         rts
