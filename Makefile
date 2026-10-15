@@ -9,9 +9,10 @@ Z80_BUILD   := $(BUILD)/z80
 M6809_BUILD := $(BUILD)/6809
 CPM_BUILD   := $(BUILD)/cpm22
 
-CPM22_CORE ?= external/cpm22/ccpbdos56.bin
+CPM22_CORE        ?= external/cpm22/ccpbdos56.bin
+FUJITSU_CPM_IMAGE ?= external/reference/cpm2d00.img
 
-.PHONY: all check-tools bios ioserver loader system clean
+.PHONY: all check-tools bios ioserver loader system extract-core clean
 
 all: check-tools system ioserver loader
 
@@ -40,6 +41,9 @@ loader: $(M6809_BUILD)/loader.bin
 $(M6809_BUILD)/loader.bin: m6809/loader.asm include/6809/fm11.inc | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/loader.lst --symbols -o $@ $<
 
+extract-core: $(FUJITSU_CPM_IMAGE) tools/extract_fujitsu_core.py
+	$(PYTHON) tools/extract_fujitsu_core.py $(FUJITSU_CPM_IMAGE) $(CPM22_CORE)
+
 system: $(CPM_BUILD)/system56.bin
 
 $(CPM_BUILD)/system56.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py | $(CPM_BUILD)
@@ -47,7 +51,13 @@ $(CPM_BUILD)/system56.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py
 
 $(CPM22_CORE):
 	@echo "error: missing $@" >&2
-	@echo "Place a 56K CP/M 2.2 CCP+BDOS binary there (exactly 0x1600 bytes)." >&2
+	@echo "Either place a 56K CP/M 2.2 CCP+BDOS binary there (exactly 0x1600 bytes)," >&2
+	@echo "or place the Fujitsu disk image at $(FUJITSU_CPM_IMAGE) and run: make extract-core" >&2
+	@exit 1
+
+$(FUJITSU_CPM_IMAGE):
+	@echo "error: missing $@" >&2
+	@echo "Place the locally owned Fujitsu FM-11 CP/M 2D image there." >&2
 	@exit 1
 
 clean:
