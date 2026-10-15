@@ -2,20 +2,22 @@
 
 ## Required tools
 
+- `z80asm` for the Z80 BIOS
 - `lwasm` from LWTOOLS, used in strict 6809 mode (`--6809`)
-- `asm8080`, the Intel 8080 assembler distributed as the `asm8080` npm package
 - Python 3
 - GNU Make or a compatible make
 
-Typical installation for `asm8080`:
+On Ubuntu, install the Z80 assembler with:
 
 ```sh
-npm install -g asm8080
+sudo apt install z80asm
 ```
 
-`lwasm` is invoked with raw output and a listing/symbol table. The Z80 BIOS
-uses Intel 8080 mnemonics because `asm8080` is intentionally an 8080, not a
-Z80, assembler.
+The BIOS is written in native Z80 syntax. `z80asm` is invoked with a raw
+binary output plus listing and label files. Its `org` directive changes the
+logical assembly address but does not pad the output file up to that address,
+which lets the BIOS be assembled at `DA00h` while still producing a compact
+`bios.bin`.
 
 ## External CCP + BDOS
 

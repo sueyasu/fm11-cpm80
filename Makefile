@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-ASM8080 ?= asm8080
+Z80ASM  ?= z80asm
 LWASM   ?= lwasm
 PYTHON  ?= python3
 
@@ -17,7 +17,7 @@ FUJITSU_CPM_IMAGE ?= external/reference/cpm2d00.img
 all: check-tools system ioserver loader
 
 check-tools:
-	@command -v $(ASM8080) >/dev/null 2>&1 || { echo "error: asm8080 not found" >&2; exit 1; }
+	@command -v $(Z80ASM) >/dev/null 2>&1 || { echo "error: z80asm not found" >&2; echo "Install it with: sudo apt install z80asm" >&2; exit 1; }
 	@command -v $(LWASM) >/dev/null 2>&1 || { echo "error: lwasm not found" >&2; exit 1; }
 	@command -v $(PYTHON) >/dev/null 2>&1 || { echo "error: python3 not found" >&2; exit 1; }
 
@@ -27,7 +27,7 @@ $(Z80_BUILD) $(M6809_BUILD) $(CPM_BUILD):
 bios: $(Z80_BUILD)/bios.bin
 
 $(Z80_BUILD)/bios.bin: cpm22/bios/bios.asm include/z80/fm11.inc | $(Z80_BUILD)
-	$(ASM8080) cpm22/bios/bios.asm --split -l -o $(Z80_BUILD)
+	$(Z80ASM) --includepath=include/z80 --list=$(Z80_BUILD)/bios.lst --label=$(Z80_BUILD)/bios.sym --output=$@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x400 --name "CP/M 2.2 BIOS (DA00-DDFF)"
 
 ioserver: $(M6809_BUILD)/ioserver.bin
