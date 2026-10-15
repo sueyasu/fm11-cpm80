@@ -36,13 +36,17 @@ MINIFDC_AUX     equ     MINIFDC+6
 MINIFDC_IRQ     equ     MINIFDC+7      * read acknowledges FDC IRQ
 
 FDC_CMD_READSEC equ     $80
+FDC_CMD_WRITESEC equ    $A0
 FDC_ST_BUSY     equ     $01
 FDC_ST_DRQ      equ     $02
 FDC_ST_LOST     equ     $04
 FDC_ST_CRC      equ     $08
 FDC_ST_RNF      equ     $10
+FDC_ST_WRFAULT  equ     $20
+FDC_ST_WRPROT   equ     $40
 FDC_ST_NOTRDY   equ     $80
 FDC_READERR     equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_NOTRDY
+FDC_WRITEERR    equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_WRFAULT+FDC_ST_WRPROT+FDC_ST_NOTRDY
 
 * Standard FDC, reserved for the 2HD drives E:-H: (not implemented yet).
 STDFDC          equ     $FD30

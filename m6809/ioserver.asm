@@ -62,9 +62,20 @@ ServiceWrite
         lbsr    DecodeLogicalSector
         bcs     ServiceBad
 
-* WRITE is deliberately not claimed yet.  It will use a 256-byte
-* read/modify/write so one CP/M 128-byte record cannot corrupt its neighbour.
-        lda     #MBSTAT_ERROR
+* A:-D: use 256-byte physical sectors while CP/M writes 128-byte records.
+* Preserve the neighbouring record with a read/modify/write cycle.
+        lda     MBOX_DRIVE
+        cmpa    #4
+        bhs     ServiceBad
+
+        lbsr    MiniFdcReadSector
+        bcs     ServiceBad
+        lbsr    CopyDmaToWriteHalf
+        bcs     ServiceBad
+        lbsr    MiniFdcWriteSector
+        bcs     ServiceBad
+
+        lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
 
@@ -171,9 +182,9 @@ DlsBad
         rts
 
 * ----------------------------------------------------------------------
-* Read one 256-byte sector from the Mini FDC into PhysBuf.
+* Select Mini FDC geometry for the current request.
 * ----------------------------------------------------------------------
-MiniFdcReadSector
+MiniFdcSelect
         lda     MBOX_DRIVE
         anda    #$03
         sta     MINIFDC_DRIVE
@@ -185,6 +196,13 @@ MiniFdcReadSector
         sta     MINIFDC_TRACK
         lda     PhysSector
         sta     MINIFDC_SECTOR
+        rts
+
+* ----------------------------------------------------------------------
+* Read one 256-byte sector from the Mini FDC into PhysBuf.
+* ----------------------------------------------------------------------
+MiniFdcReadSector
+        lbsr    MiniFdcSelect
 
         lda     MINIFDC_IRQ
         lda     #FDC_CMD_READSEC
@@ -221,6 +239,46 @@ MfrFailAck
         rts
 
 * ----------------------------------------------------------------------
+* Write PhysBuf as one 256-byte Mini FDC sector.
+* ----------------------------------------------------------------------
+MiniFdcWriteSector
+        lbsr    MiniFdcSelect
+
+        lda     MINIFDC_IRQ
+        lda     #FDC_CMD_WRITESEC
+        sta     MINIFDC_STATUS
+
+        ldy     #PhysBuf
+        clrb                    * 0 means 256 iterations with DECB/BNE
+MfwByte
+        ldx     #$FFFF
+MfwWaitDrq
+        lda     MINIFDC_STATUS
+        bita    #FDC_WRITEERR
+        bne     MfwFailAck
+        bita    #FDC_ST_DRQ
+        bne     MfwHaveByte
+        leax    -1,x
+        bne     MfwWaitDrq
+        bra     MfwFailAck
+MfwHaveByte
+        lda     ,y+
+        sta     MINIFDC_DATA
+        decb
+        bne     MfwByte
+
+        lda     MINIFDC_STATUS
+        bita    #FDC_WRITEERR
+        bne     MfwFailAck
+        lda     MINIFDC_IRQ
+        andcc   #$FE
+        rts
+MfwFailAck
+        lda     MINIFDC_IRQ
+        orcc    #$01
+        rts
+
+* ----------------------------------------------------------------------
 * Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
 * ----------------------------------------------------------------------
 CopyReadHalfToDma
@@ -236,6 +294,25 @@ CrhLoop
         sta     ,y+
         decb
         bne     CrhLoop
+        andcc   #$FE
+        rts
+
+* ----------------------------------------------------------------------
+* Copy 128 bytes from the CP/M DMA address into the selected half of PhysBuf.
+* ----------------------------------------------------------------------
+CopyDmaToWriteHalf
+        ldx     #PhysBuf
+        lda     PhysHalf
+        beq     CwhDestReady
+        leax    128,x
+CwhDestReady
+        ldy     MBOX_DMA_H
+        ldb     #128
+CwhLoop
+        lda     ,y+
+        sta     ,x+
+        decb
+        bne     CwhLoop
         andcc   #$FE
         rts
 
