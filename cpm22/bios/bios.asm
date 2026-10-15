@@ -67,6 +67,7 @@ boot:
         ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl
+        call    serial_init
         call    setvec
         jp      CCPBASE
 
@@ -90,8 +91,29 @@ setvec:
 
 ; ----------------------------------------------------------------------
 ; Console: direct access to the Z80-visible standard 8251.
-; The 6809 loader/firmware initializes its mode/clock environment first.
+;
+; Use the conventional defensive 8251 initialization sequence. Three zero
+; writes force a known command/mode phase, 40h performs an internal reset,
+; 4Eh selects asynchronous x16, 8 data bits, no parity, one stop bit, and
+; 27h enables Tx/Rx with DTR/RTS asserted.
+;
+; This also matches the FM-11 emulator's USART state machine, whose reset
+; state otherwise leaves TXRDY low and would make the first CONOUT wait
+; forever after the 6809 hands control to the Z80.
 ; ----------------------------------------------------------------------
+
+serial_init:
+        xor     a
+        ld      (FM11_SER_STAT),a
+        ld      (FM11_SER_STAT),a
+        ld      (FM11_SER_STAT),a
+        ld      a,040h
+        ld      (FM11_SER_STAT),a
+        ld      a,04Eh
+        ld      (FM11_SER_STAT),a
+        ld      a,027h
+        ld      (FM11_SER_STAT),a
+        ret
 
 const:
         ld      a,(FM11_SER_STAT)
