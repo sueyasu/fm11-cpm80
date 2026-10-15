@@ -76,7 +76,7 @@ ColdBootFail
 
 ServiceLoop
         ldb     MBOX_CMD
-        beq     ServiceDone
+        lbeq    ServiceDone
         cmpb    #MBCMD_READ
         beq     ServiceRead
         cmpb    #MBCMD_WRITE
@@ -87,7 +87,7 @@ ServiceLoop
 ServiceBad
         lda     #MBSTAT_ERROR
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra    ServiceDone
 
 ServiceRead
         lbsr    ValidateDiskRequest

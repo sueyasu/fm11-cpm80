@@ -64,24 +64,33 @@ boot:
         xor     a
         ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
         ld      (0003h),a       ; IOBYTE
-        ld      (0004h),a       ; current disk = A:
+        ld      (0004h),a       ; current disk/user = user 0, A:
         ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl
         call    serial_init
         call    setvec
+        xor     a
+        ld      c,a             ; CCP entry C = uuuudddd = 00h
         jp      CCPBASE
 
-; Reload CCP+BDOS from the reserved system tracks on A:.
-; The 6809 performs the physical I/O while the Z80 is stopped.
+; Reload CCP+BDOS from the reserved system tracks on the boot disk.
+; CP/M page zero byte 0004h is uuuudddd: high nibble = user number,
+; low nibble = current drive.  CCP requires that complete byte in C on entry.
 wboot:
+        ld      a,(0004h)
+        ld      (wbootinfo),a
+.wboot_retry:
         ld      a,MBCMD_WBOOT
         call    mbox_simple
         or      a
-        jr      nz,wboot        ; retry on media/FDC error
+        jr      nz,.wboot_retry ; retry on media/FDC error
 
-        ld      a,(0004h)       ; preserve CP/M current drive across reload
-        ld      (curdrv),a
+        ld      a,(wbootinfo)
+        ld      (0004h),a
+        ld      c,a             ; preserve full CCP user/current-drive context
+        and     00Fh
+        ld      (curdrv),a      ; BIOS disk path needs only the drive number
         ld      hl,0080h
         ld      (curdma),hl
         call    setvec
@@ -326,5 +335,7 @@ cursec:
         dw      0
 curdma:
         dw      0080h
+wbootinfo:
+        db      0
 
         end
