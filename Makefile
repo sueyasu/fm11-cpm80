@@ -18,7 +18,7 @@ D88_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.d88
 RAW_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.raw
 COMMAND_FILES := $(wildcard $(COMMANDS_DIR)/*.COM) $(wildcard $(COMMANDS_DIR)/*.com)
 
-.PHONY: all check-tools bios ioserver loader ipl system image extract-core clean
+.PHONY: all check-tools bios ioserver ipl system image extract-core clean
 
 all: check-tools image
 
@@ -42,16 +42,11 @@ $(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm include/6809/fm11.inc | $(M6809_
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0xE00 --name "6809 I/O server (DE00-EBFF)"
 
-loader: $(M6809_BUILD)/loader.bin
-
-$(M6809_BUILD)/loader.bin: m6809/loader.asm include/6809/fm11.inc $(CPM_BUILD)/system56.bin $(M6809_BUILD)/ioserver.bin | $(M6809_BUILD)
-	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/loader.lst --symbols -o $@ $<
-
 ipl: $(M6809_BUILD)/ipl_2d.bin
 
 $(M6809_BUILD)/ipl_2d.bin: m6809/ipl_2d.asm | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw --list=$(M6809_BUILD)/ipl_2d.lst --symbols -o $@ $<
-	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "FM-11 2D stage-1 IPL (0400-05FF)"
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "FM-11 2D IPL (0400-05FF)"
 
 extract-core: $(FUJITSU_CPM_IMAGE) tools/extract_fujitsu_core.py
 	$(PYTHON) tools/extract_fujitsu_core.py $(FUJITSU_CPM_IMAGE) $(CPM22_CORE)
@@ -63,11 +58,11 @@ $(CPM_BUILD)/system56.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py
 
 image: $(D88_IMAGE)
 
-$(D88_IMAGE): $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/loader.bin $(CPM_BUILD)/system56.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+$(D88_IMAGE): $(M6809_BUILD)/ipl_2d.bin $(CPM_BUILD)/system56.bin $(M6809_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
 	$(PYTHON) tools/mk2d_d88.py \
 		--ipl $(M6809_BUILD)/ipl_2d.bin \
-		--loader $(M6809_BUILD)/loader.bin \
 		--system $(CPM_BUILD)/system56.bin \
+		--ioserver $(M6809_BUILD)/ioserver.bin \
 		--commands $(COMMANDS_DIR) \
 		--output $@ \
 		--raw-output $(RAW_IMAGE) \

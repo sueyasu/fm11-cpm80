@@ -31,34 +31,35 @@ sectors per track entry, and 256-byte sectors.
 DPB `OFF=2` reserves the first two cylinders, giving a 16 KiB system area at
 raw offsets `$0000-$3FFF`.
 
+The system image is stored only once and follows the current RAM layout directly:
+
 ```text
-0000-01FF  stage-1 IPL (ROM loads this to 6809 $0400)
-0200-1FFF  position-independent stage-2 loader.bin and zero padding
-2000-39FF  warm-boot system56.bin copy (Z80 $C400-$DDFF)
-3A00-3FFF  reserved/zero padding
+0000-01FF  IPL (ROM loads this to 6809 $0400)
+0200-1BFF  system56.bin -> Z80 $C400-$DDFF
+1C00-29FF  6809 I/O-server slot -> $DE00-$EBFF
+2A00-3FFF  reserved/zero padding
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
 
-The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. Stage 1 uses
-`$2000` as its stack, then reads only the remaining 30 sectors of cylinder 0,
-T0/H0/S3-S16 followed by T0/H1/S1-S16, to `$2600-$43FF` and jumps to `$2600`.
+`system56.bin` is exactly `$1A00` bytes. The I/O-server slot is fixed at
+`$0E00` bytes; the actual `ioserver.bin` is followed by zero padding. Therefore
+the IPL can load one fixed 40-sector stream from raw `$0200-$29FF` directly to
+RAM `$C400-$EBFF`.
 
-The `$2600` stage-2 start address is part of the boot memory map. Testing showed
-that starting the 6809 stage-2 at `$4000` caused unstable execution, while the
-same position-independent loader starting below `$4000` booted CP/M through the
-CCP prompt and `DIR`. The loaded image is allowed to extend above `$4000`; the
-observed restriction applies to its execution start address.
+The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. The IPL begins its
+direct load at T0/H0/S3. The first 30 sectors finish cylinder 0 and the final
+10 sectors are T1/H0/S1-S10. A real WD17xx SEEK is issued when the load crosses
+the cylinder boundary.
 
-The image builder rejects an IPL larger than `$0200` bytes or a stage-2 image
-larger than `$1E00` bytes. This guarantees that the ROM-loaded IPL never needs
-to seek away from track 0.
+There is no stage-2 loader and no separate warm-boot copy of the CP/M system.
+WBOOT reuses the same system image and reloads only CCP+BDOS (`$1600` bytes,
+22 physical sectors) from raw `$0200-$17FF` to Z80 `$C400-$D9FF`. BIOS and the
+resident 6809 I/O server remain resident.
 
-The second reserved cylinder holds the normal CP/M warm-boot reload image.
-`system56.bin` must be exactly `$1A00` bytes and is written at raw offset
-`$2000`, which is physical cylinder 1, side 0, sector 1. WBOOT reloads the first
-26 physical sectors of that cylinder into Z80 `$C400-$DDFF`, restoring CCP,
-BDOS, and BIOS.
+The image builder rejects an IPL larger than `$0200`, a `system56.bin` whose
+size is not exactly `$1A00`, or an I/O server larger than its current `$0E00`
+RAM slot.
 
 ## Adding CP/M commands
 

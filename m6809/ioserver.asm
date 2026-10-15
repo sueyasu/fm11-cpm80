@@ -279,20 +279,20 @@ MfwFailAck
         rts
 
 * ----------------------------------------------------------------------
-* Warm boot: reload the complete 56K CP/M system image from the reserved
-* copy in physical cylinder 1 of drive A:.  The image is exactly $1A00
-* bytes (26 x 256-byte sectors) and maps directly to Z80 $C400-$DDFF.
+* Warm boot: reload CCP+BDOS from the same system image used by cold boot.
+* The image begins at raw offset $0200 (T0/H0/S3).  CCP+BDOS is exactly
+* $1600 bytes = 22 physical sectors and maps directly to Z80 $C400-$D9FF.
+* BIOS and the resident 6809 I/O server remain resident and are not reloaded.
 * ----------------------------------------------------------------------
 WarmBootReload
         clr     MBOX_DRIVE      * warm boot always uses system drive A:
-        lda     #1
-        sta     PhysTrack
+        clr     PhysTrack
         clr     PhysSide
-        lda     #1
+        lda     #3
         sta     PhysSector
         ldx     #$C400
         stx     WBootDest
-        ldu     #26
+        ldu     #22
 
 WbrSector
         lbsr    MiniFdcReadSector
