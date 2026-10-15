@@ -8,20 +8,26 @@ BUILD       := build
 Z80_BUILD   := $(BUILD)/z80
 M6809_BUILD := $(BUILD)/6809
 CPM_BUILD   := $(BUILD)/cpm22
+IMAGE_BUILD := $(BUILD)/images
 
 CPM22_CORE        ?= external/cpm22/ccpbdos56.bin
 FUJITSU_CPM_IMAGE ?= external/reference/cpm2d00.img
+COMMANDS_DIR      ?= external/commands
 
-.PHONY: all check-tools bios ioserver loader system extract-core clean
+D88_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.d88
+RAW_IMAGE := $(IMAGE_BUILD)/fm11-cpm80-2d.raw
+COMMAND_FILES := $(wildcard $(COMMANDS_DIR)/*.COM) $(wildcard $(COMMANDS_DIR)/*.com)
 
-all: check-tools system ioserver loader
+.PHONY: all check-tools bios ioserver loader system image extract-core clean
+
+all: check-tools image
 
 check-tools:
 	@command -v $(Z80ASM) >/dev/null 2>&1 || { echo "error: z80asm not found" >&2; echo "Install it with: sudo apt install z80asm" >&2; exit 1; }
 	@command -v $(LWASM) >/dev/null 2>&1 || { echo "error: lwasm not found" >&2; exit 1; }
 	@command -v $(PYTHON) >/dev/null 2>&1 || { echo "error: python3 not found" >&2; exit 1; }
 
-$(Z80_BUILD) $(M6809_BUILD) $(CPM_BUILD):
+$(Z80_BUILD) $(M6809_BUILD) $(CPM_BUILD) $(IMAGE_BUILD):
 	mkdir -p $@
 
 bios: $(Z80_BUILD)/bios.bin
@@ -48,6 +54,16 @@ system: $(CPM_BUILD)/system56.bin
 
 $(CPM_BUILD)/system56.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py | $(CPM_BUILD)
 	$(PYTHON) tools/mksystem.py --core $(CPM22_CORE) --bios $(Z80_BUILD)/bios.bin --output $@
+
+image: $(D88_IMAGE)
+
+$(D88_IMAGE): $(M6809_BUILD)/loader.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2d_d88.py \
+		--loader $(M6809_BUILD)/loader.bin \
+		--commands $(COMMANDS_DIR) \
+		--output $@ \
+		--raw-output $(RAW_IMAGE) \
+		--label "FM11 CPM80"
 
 $(CPM22_CORE):
 	@echo "error: missing $@" >&2

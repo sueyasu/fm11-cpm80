@@ -51,6 +51,16 @@ The extractor copies image offsets `0200h-17FFh` to `external/cpm22/ccpbdos56.bi
 
 A conventional 62K CP/M layout would put CCP near `DC00`, BDOS near `E400`, and BIOS near `F200`. On the FM-11 port that would overlap the resident 6809 I/O service beginning at `DE00`, so a 62K CCP/BDOS image is not currently usable.
 
+## External CP/M commands
+
+Place any command binaries to be installed on the generated disk in:
+
+```text
+external/commands/
+```
+
+Only `.COM` files are imported. They are not tracked by Git. See `external/commands/README.md` and `docs/disk-image.md`.
+
 ## Memory ownership above BDOS
 
 ```text
@@ -88,6 +98,7 @@ make bios
 make ioserver
 make system
 make loader
+make image
 make extract-core
 make clean
 ```
@@ -103,8 +114,12 @@ build/6809/ioserver.lst
 build/6809/loader.bin
 build/6809/loader.lst
 build/cpm22/system56.bin
+build/images/fm11-cpm80-2d.raw
+build/images/fm11-cpm80-2d.d88
 ```
 
 `system56.bin` covers the Z80 address range `C400-DDFF`: the supplied CCP+BDOS followed by the new BIOS padded to `DE00`.
 
 `loader.bin` is the position-independent stage-2 cold image. It contains its own copy of `system56.bin` and `ioserver.bin`; when executed by the 6809 it installs both at their final addresses, prepares the Z80 reset vector, and transfers control through the resident I/O server. See `docs/coldboot.md` for the stage-1 loading constraint.
+
+The D88 image is currently a correctly formatted 2D CP/M filesystem containing the stage-2 payload and optional `.COM` files. The first `0200h` bytes of the system area are reserved for the stage-1 IPL, so the generated image is not bootable until that IPL is implemented.

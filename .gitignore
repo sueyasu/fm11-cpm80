@@ -1,5 +1,7 @@
 build/
 external/cpm22/*.bin
 external/reference/*
+external/commands/*
 !external/cpm22/README.md
 !external/reference/README.md
+!external/commands/README.md

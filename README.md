@@ -24,6 +24,8 @@ See [docs/build.md](docs/build.md) for setup and the required external CCP+BDOS 
 
 The CP/M CCP+BDOS binary is intentionally not kept in Git. The current build expects a locally supplied **56K** core at `external/cpm22/ccpbdos56.bin`; a normal 62K image overlaps the resident 6809 I/O-service area and is therefore not suitable for this initial port.
 
+Optional CP/M `.COM` files can be placed in `external/commands/`; `make image` installs them into the generated 2D filesystem.
+
 ## Current status
 
 The repository contains:
@@ -37,7 +39,10 @@ The repository contains:
 - functional Mini FDC PIO READ path for A:-D: 2D drives
 - logical 128-byte to physical 256-byte sector deblocking
 - position-independent 6809 stage-2 cold loader with embedded CP/M and I/O-server payloads
+- 2D CP/M filesystem builder with D88 and raw-image output
 - Makefile with binary-size/layout checks
+
+The generated D88 currently reserves its first `$0200` bytes for the not-yet-implemented stage-1 IPL, so the image is structurally complete but not yet bootable.
 
 WRITE, 2HD Standard-FDC transfer, warm boot reload, and the final stage-1 boot-track IPL remain to be implemented.
 
@@ -48,8 +53,9 @@ cpm22/bios/        Z80 CP/M 2.2 BIOS
 include/z80/       Z80-side FM-11 definitions
 include/6809/      6809-side FM-11 definitions
 m6809/             cold loader and resident I/O service
-tools/             build/layout helpers
+tools/             build/layout and disk-image helpers
 external/cpm22/    local, untracked CCP+BDOS input
+external/commands/ local, untracked CP/M command binaries
 docs/              hardware, protocol, disk and build notes
 ```
 
