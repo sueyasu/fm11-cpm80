@@ -4,8 +4,9 @@
 ;   CCP  = C400h
 ;   BDOS = CC00h
 ;   BIOS = DA00h
-;   6809 resident service = DE00h-EBFFh
-;   mailbox              = EC00h
+;   6809 resident service = physical RAM above 10000h
+;   disk workspace        = F9A0h-FBE7h
+;   mailbox               = FBF6h-FBFFh
 ;
 ; Z80 syntax for z80asm.
 
@@ -15,10 +16,10 @@ CCPBASE:        equ     0C400h
 BDOSENT:        equ     0CC06h
 BIOSBASE:       equ     0DA00h
 
-; CP/M mutable disk workspace lives in fixed RAM above the shared service
-; area. These addresses do not emit bytes into the BIOS image.
-DIRBUF:         equ     0F000h
-CSV0:           equ     0F080h
+; CP/M mutable disk workspace is packed directly below the shared mailbox.
+; These addresses do not emit bytes into the BIOS image.
+DIRBUF:         equ     0F9A0h
+CSV0:           equ     0FA20h
 CSV1:           equ     CSV0+32
 CSV2:           equ     CSV1+32
 CSV3:           equ     CSV2+32
@@ -26,7 +27,7 @@ CSV4:           equ     CSV3+32
 CSV5:           equ     CSV4+32
 CSV6:           equ     CSV5+32
 CSV7:           equ     CSV6+32
-ALV0:           equ     0F180h
+ALV0:           equ     0FB20h
 ALV1:           equ     ALV0+19
 ALV2:           equ     ALV1+19
 ALV3:           equ     ALV2+19
@@ -71,10 +72,8 @@ boot:
         call    setvec
         jp      CCPBASE
 
-; Reload CCP+BDOS+BIOS from the reserved warm-boot copy on A: system tracks.
-; The 6809 performs the physical I/O while the Z80 is stopped.  The BIOS
-; code being executed is replaced by an identical copy, so execution safely
-; resumes at the instruction following the CPU hand-off.
+; Reload CCP+BDOS from the reserved system tracks on A:.
+; The 6809 performs the physical I/O while the Z80 is stopped.
 wboot:
         ld      a,MBCMD_WBOOT
         call    mbox_simple
@@ -105,10 +104,6 @@ setvec:
 ; writes force a known command/mode phase, 40h performs an internal reset,
 ; 4Eh selects asynchronous x16, 8 data bits, no parity, one stop bit, and
 ; 27h enables Tx/Rx with DTR/RTS asserted.
-;
-; This also matches the FM-11 emulator's USART state machine, whose reset
-; state otherwise leaves TXRDY low and would make the first CONOUT wait
-; forever after the 6809 hands control to the Z80.
 ; ----------------------------------------------------------------------
 
 serial_init:

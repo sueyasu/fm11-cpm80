@@ -58,7 +58,7 @@ SECTORS_PER_SIDE    equ       16
 
 MBOX_BASE           equ       $FBF6
 MBOX_LEN            equ       10
-CPM_WORK_BASE       equ       $F000
+CPM_WORK_BASE       equ       $F9A0
 CPM_WORK_LEN        equ       $0248
 IOSERVER_BASE       equ       $DE00
 
@@ -120,7 +120,7 @@ clear_mailbox       sta       ,x+
                     cmpu      #0
                     bne       clear_mailbox
 
-* Clear CP/M mutable DIRBUF/CSV/ALV workspace.
+* Clear CP/M mutable DIRBUF/CSV/ALV workspace at $F9A0-$FBE7.
                     ldx       #CPM_WORK_BASE
                     ldu       #CPM_WORK_LEN
                     clra

@@ -21,7 +21,7 @@ $FD94        DMA physical-address bank (PA19-16)
 ```
 
 The direct-load disk stream still occupies the 30 sectors remaining on
-cylinder 0, but its two components now use different physical DMA banks:
+cylinder 0, but its two components use different physical DMA banks:
 
 ```text
 Disk raw        Physical RAM       Contents
@@ -63,11 +63,20 @@ mapping is complete, and then jumps to logical `$DE00`.
 `$FE00`. This fixed SRAM remains visible independently of the MMR. The shared
 Z80/6809 mailbox occupies `$FBF6-$FBFF`, the top ten bytes of Z80-visible RAM.
 
-After the direct load completes, the IPL also clears the CP/M disk workspace at
-`$F000-$F247`, installs `JP $DA00` at Z80 reset address `$0000`, and enters the
-private I/O server. The server hands control to the Z80 through the fixed-SRAM
-trampoline; the Z80 starts at `$0000`, jumps to BIOS at `$DA00`, and continues
-to the CCP at `$C400`.
+The CP/M mutable disk workspace is packed directly below the mailbox:
+
+```text
+$F9A0-$FA1F   DIRBUF
+$FA20-$FB1F   CSV0-CSV7
+$FB20-$FBE7   ALV0-ALV7
+$FBE8-$FBF5   reserved / free
+$FBF6-$FBFF   mailbox
+```
+
+The IPL clears `$F9A0-$FBE7` during cold boot, installs `JP $DA00` at Z80 reset
+address `$0000`, and enters the private I/O server. The server hands control to
+the Z80 through the fixed-SRAM trampoline; the Z80 starts at `$0000`, jumps to
+BIOS at `$DA00`, and continues to the CCP at `$C400`.
 
 The former position-independent stage-2 loader at `$2600` is no longer used.
 The earlier `$4000` execution problem therefore does not affect this boot path.
