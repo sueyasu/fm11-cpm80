@@ -60,11 +60,6 @@ ClearWorkspace
         cmpu    #0
         bne     ClearWorkspace
 
-* Expose low RAM before installing the Z80 reset trampoline.  MMR identity
-* mapping does not control the FM-11 ROM/RAM overlay at 0000h.
-        lda     #FM11_ROM_RAM
-        sta     >FM11_ROMCTL
-
 * Z80 is released from WAIT with PC=0000. Install:
 *     0000: C3 00 DA    JP DA00
 * Force extended addressing so these stores never depend on the inherited DP.
