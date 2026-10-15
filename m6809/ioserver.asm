@@ -36,9 +36,9 @@ ServiceBad
         bra     ServiceDone
 
 ServiceRead
-        bsr     ValidateDiskRequest
+        lbsr    ValidateDiskRequest
         bcs     ServiceBad
-        bsr     DecodeLogicalSector
+        lbsr    DecodeLogicalSector
         bcs     ServiceBad
 
 * First functional target: A:-D: (2D / Mini FDC).  E:-H: explicitly fail
@@ -47,9 +47,9 @@ ServiceRead
         cmpa    #4
         bhs     ServiceBad
 
-        bsr     MiniFdcReadSector
+        lbsr    MiniFdcReadSector
         bcs     ServiceBad
-        bsr     CopyReadHalfToDma
+        lbsr    CopyReadHalfToDma
         bcs     ServiceBad
 
         lda     #MBSTAT_OK
@@ -57,9 +57,9 @@ ServiceRead
         bra     ServiceDone
 
 ServiceWrite
-        bsr     ValidateDiskRequest
+        lbsr    ValidateDiskRequest
         bcs     ServiceBad
-        bsr     DecodeLogicalSector
+        lbsr    DecodeLogicalSector
         bcs     ServiceBad
 
 * WRITE is deliberately not claimed yet.  It will use a 256-byte
