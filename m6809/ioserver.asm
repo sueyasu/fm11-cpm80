@@ -13,8 +13,6 @@ IoServerStart
         clr     MBOX_CMD
         clr     MBOX_STATUS
 
-* Initial hand-off to the Z80.  When the Z80 later writes CPUCTL=0, the
-* 6809 resumes at the instruction after STA.
 IoServerArm
         lda     #$01
         sta     CPUCTL
@@ -41,8 +39,6 @@ ServiceRead
         lbsr    DecodeLogicalSector
         bcs     ServiceBad
 
-* First functional target: A:-D: (2D / Mini FDC).  E:-H: explicitly fail
-* until the Standard FDC path is implemented.
         lda     MBOX_DRIVE
         cmpa    #4
         bhs     ServiceBad
@@ -63,7 +59,7 @@ ServiceWrite
         bcs     ServiceBad
 
 * A:-D: use 256-byte physical sectors while CP/M writes 128-byte records.
-* Preserve the neighbouring record with a read/modify/write cycle.
+* Preserve the neighbouring record with a DMA read/modify/DMA write cycle.
         lda     MBOX_DRIVE
         cmpa    #4
         bhs     ServiceBad
@@ -89,13 +85,10 @@ ServiceWBoot
 ServiceDone
         clr     MBOX_CMD
         lda     #$01
-        sta     CPUCTL          * stop 6809, resume Z80
-        nop                     * resume here on the next Z80 request
+        sta     CPUCTL
+        nop
         bra     ServiceLoop
 
-* ----------------------------------------------------------------------
-* Validate drive 0..7.  Carry set on failure.
-* ----------------------------------------------------------------------
 ValidateDiskRequest
         lda     MBOX_DRIVE
         cmpa    #8
@@ -106,23 +99,7 @@ VdrBad
         orcc    #$01
         rts
 
-* ----------------------------------------------------------------------
-* Convert a CP/M 128-byte logical sector to FDC geometry.
-*
-* Inputs:
-*   MBOX_DRIVE     0..3 = 2D, 4..7 = 2HD
-*   MBOX_TRACK_*   cylinder (big endian)
-*   MBOX_SECTOR_*  logical record within cylinder (big endian)
-*
-* Outputs:
-*   PhysTrack      cylinder low byte
-*   PhysSide       0 or 1
-*   PhysSector     1-based physical sector number
-*   PhysHalf       0=first 128 bytes, 1=second 128 bytes
-*   PhysFdcBase    MINIFDC or STDFDC
-*
-* Carry set if track/sector is outside the selected format.
-* ----------------------------------------------------------------------
+* Convert a CP/M 128-byte logical sector to physical FDC geometry.
 DecodeLogicalSector
         lda     MBOX_TRACK_H
         bne     DlsBad
@@ -171,8 +148,8 @@ DlsHaveSide
         tfr     b,a
         anda    #$01
         sta     PhysHalf
-        lsrb                    * two 128-byte records per physical sector
-        incb                    * FDC sector numbers are 1-based
+        lsrb
+        incb
         stb     PhysSector
         andcc   #$FE
         rts
@@ -181,9 +158,6 @@ DlsBad
         orcc    #$01
         rts
 
-* ----------------------------------------------------------------------
-* Select Mini FDC geometry for the current request.
-* ----------------------------------------------------------------------
 MiniFdcSelect
         lda     MBOX_DRIVE
         anda    #$03
@@ -198,94 +172,108 @@ MiniFdcSelect
         sta     MINIFDC_SECTOR
         rts
 
-* ----------------------------------------------------------------------
-* Read one 256-byte sector from the Mini FDC into PhysBuf.
-* ----------------------------------------------------------------------
+* Program Mini-FDC DMA channel 0 for a 256-byte transfer at X.
+* Current CP/M 2.2 buffers are all in physical bank 0.
+MiniDmaSetup
+        clr     DMA0_MODE
+        clr     DMA0_BANK
+        tfr     x,d
+        sta     DMA0_ADDR_H
+        stb     DMA0_ADDR_L
+        lda     #$01
+        sta     DMA0_COUNT_H
+        clr     DMA0_COUNT_L
+        rts
+
+* DMA one physical sector from Mini FDC to PhysBuf.
 MiniFdcReadSector
         lbsr    MiniFdcSelect
-
         lda     MINIFDC_IRQ
+
+        ldx     #PhysBuf
+        lbsr    MiniDmaSetup
+        lda     #DMA_READ_MODE
+        sta     DMA0_MODE
         lda     #FDC_CMD_READSEC
         sta     MINIFDC_STATUS
 
-        ldy     #PhysBuf
-        clrb                    * 0 means 256 iterations with DECB/BNE
-MfrByte
-        ldx     #$FFFF
-MfrWaitDrq
+        ldu     #$FFFF
+MfrWait
+        lda     DMA0_MODE
+        bita    #DMA_ERROR
+        bne     MfrFail
+        bita    #DMA_COMPLETE
+        bne     MfrDone
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
-        bne     MfrFailAck
-        bita    #FDC_ST_DRQ
-        bne     MfrHaveByte
-        leax    -1,x
-        bne     MfrWaitDrq
-        bra     MfrFailAck
-MfrHaveByte
-        lda     MINIFDC_DATA
-        sta     ,y+
-        decb
-        bne     MfrByte
+        bne     MfrFail
+        leau    -1,u
+        cmpu    #0
+        bne     MfrWait
+        bra     MfrFail
 
+MfrDone
+        clr     DMA0_MODE
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
         bne     MfrFailAck
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
+
+MfrFail
+        clr     DMA0_MODE
 MfrFailAck
         lda     MINIFDC_IRQ
         orcc    #$01
         rts
 
-* ----------------------------------------------------------------------
-* Write PhysBuf as one 256-byte Mini FDC sector.
-* ----------------------------------------------------------------------
+* DMA PhysBuf as one physical sector to the Mini FDC.
 MiniFdcWriteSector
         lbsr    MiniFdcSelect
-
         lda     MINIFDC_IRQ
+
+        ldx     #PhysBuf
+        lbsr    MiniDmaSetup
+        lda     #DMA_WRITE_MODE
+        sta     DMA0_MODE
         lda     #FDC_CMD_WRITESEC
         sta     MINIFDC_STATUS
 
-        ldy     #PhysBuf
-        clrb                    * 0 means 256 iterations with DECB/BNE
-MfwByte
-        ldx     #$FFFF
-MfwWaitDrq
+        ldu     #$FFFF
+MfwWait
+        lda     DMA0_MODE
+        bita    #DMA_ERROR
+        bne     MfwFail
+        bita    #DMA_COMPLETE
+        bne     MfwDone
         lda     MINIFDC_STATUS
         bita    #FDC_WRITEERR
-        bne     MfwFailAck
-        bita    #FDC_ST_DRQ
-        bne     MfwHaveByte
-        leax    -1,x
-        bne     MfwWaitDrq
-        bra     MfwFailAck
-MfwHaveByte
-        lda     ,y+
-        sta     MINIFDC_DATA
-        decb
-        bne     MfwByte
+        bne     MfwFail
+        leau    -1,u
+        cmpu    #0
+        bne     MfwWait
+        bra     MfwFail
 
+MfwDone
+        clr     DMA0_MODE
         lda     MINIFDC_STATUS
         bita    #FDC_WRITEERR
         bne     MfwFailAck
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
+
+MfwFail
+        clr     DMA0_MODE
 MfwFailAck
         lda     MINIFDC_IRQ
         orcc    #$01
         rts
 
-* ----------------------------------------------------------------------
-* Warm boot: reload CCP+BDOS from the same system image used by cold boot.
-* The image begins at raw offset $0200 (T0/H0/S3).  CCP+BDOS is exactly
-* $1600 bytes = 22 physical sectors and maps directly to Z80 $C400-$D9FF.
-* BIOS and the resident 6809 I/O server remain resident and are not reloaded.
-* ----------------------------------------------------------------------
+* Warm boot reloads CCP+BDOS from the shared system image.
 WarmBootReload
-        clr     MBOX_DRIVE      * warm boot always uses system drive A:
+        clr     MBOX_DRIVE
         clr     PhysTrack
         clr     PhysSide
         lda     #3
@@ -300,7 +288,7 @@ WbrSector
 
         ldy     #PhysBuf
         ldx     WBootDest
-        clrb                    * copy all 256 bytes
+        clrb
 WbrCopy
         lda     ,y+
         sta     ,x+
@@ -329,9 +317,7 @@ WbrFail
         orcc    #$01
         rts
 
-* ----------------------------------------------------------------------
 * Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
-* ----------------------------------------------------------------------
 CopyReadHalfToDma
         ldx     #PhysBuf
         lda     PhysHalf
@@ -348,9 +334,7 @@ CrhLoop
         andcc   #$FE
         rts
 
-* ----------------------------------------------------------------------
 * Copy 128 bytes from the CP/M DMA address into the selected half of PhysBuf.
-* ----------------------------------------------------------------------
 CopyDmaToWriteHalf
         ldx     #PhysBuf
         lda     PhysHalf

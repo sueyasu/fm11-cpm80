@@ -48,5 +48,21 @@ FDC_ST_NOTRDY   equ     $80
 FDC_READERR     equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_NOTRDY
 FDC_WRITEERR    equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_WRFAULT+FDC_ST_WRPROT+FDC_ST_NOTRDY
 
+* DMA channel 0 serves the Mini FDC.
+DMA0_ADDR_H     equ     $FD40
+DMA0_ADDR_L     equ     $FD41
+DMA0_COUNT_H    equ     $FD42
+DMA0_COUNT_L    equ     $FD43
+DMA0_MODE       equ     $FD50
+DMA0_BANK       equ     $FD94
+
+DMA_DIR_READ    equ     $00            * I/O -> memory
+DMA_DIR_WRITE   equ     $01            * memory -> I/O
+DMA_ENABLE      equ     $04
+DMA_ERROR       equ     $40
+DMA_COMPLETE    equ     $80
+DMA_READ_MODE   equ     DMA_DIR_READ+DMA_ENABLE
+DMA_WRITE_MODE  equ     DMA_DIR_WRITE+DMA_ENABLE
+
 * Standard FDC, reserved for the 2HD drives E:-H: (not implemented yet).
 STDFDC          equ     $FD30
