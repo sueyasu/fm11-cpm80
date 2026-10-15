@@ -14,10 +14,10 @@
 * The I/O server is linked at logical $E000.  Before entering it, MMR14
 * maps logical $E000-$EFFF to physical $10000-$10FFF.  Logical page D
 * remains identity-mapped so the 62K CP/M TPA can extend through $DBFF.
-* The I/O-server load crosses from T0/H1/S16 to T1/H0/S1.  As in the
-* NitrOS-9 MiniFDC driver, cylinder selection is performed by writing the
-* desired cylinder directly to the MiniFDC track register; no SEEK command
-* is issued.
+* The I/O-server load crosses from T0/H1/S16 to T1/H0/S1.  Cylinder
+* changes use the same MiniFDC sequence as the FM-11 ROM IPL: write the
+* destination cylinder to the data register, issue SEEK $1B, wait for
+* BUSY to clear, then continue with READ SECTOR $8C.
 ********************************************************************
 
                     org       $0400
@@ -25,6 +25,7 @@
 FM11_FDC_CMD        equ       $FD18
 FM11_FDC_TRACK      equ       $FD19
 FM11_FDC_SECTOR     equ       $FD1A
+FM11_FDC_DATA       equ       $FD1B
 FM11_FDC_SIDE       equ       $FD1C
 FM11_FDC_DRIVE      equ       $FD1D
 
@@ -41,7 +42,9 @@ FM11_MMR_CTRL       equ       $FD93
 FM11_MMR_ENABLE     equ       $80
 FM11_MMR_PAGE_E     equ       FM11_MMR_BASE+$0E
 
-FDC_READSEC         equ       $80
+FDC_SEEK            equ       $1B
+FDC_READSEC         equ       $8C
+FDC_BUSY            equ       $01
 FDC_ERRMASK         equ       $90
 
 DMA_DIR_READ        equ       $00
@@ -89,6 +92,7 @@ load_system         lbsr      read_sector_dma
                     cmpy      #0
                     beq       system_loaded
                     lbsr      advance_chs
+                    lbcs      boot_error
                     bra       load_system
 
 system_loaded
@@ -96,6 +100,7 @@ system_loaded
 * sector (T0/H1/S13), then redirect DMA to physical $10000.  Eight sectors
 * end at T1/H0/S4 and fill physical $10000-$107FF.
                     lbsr      advance_chs
+                    lbcs      boot_error
                     lda       #IOSERVER_DMA_BANK
                     sta       >FM11_DMA0_BANK
                     ldx       #IOSERVER_DMA_ADDR
@@ -107,6 +112,7 @@ load_ioserver       lbsr      read_sector_dma
                     cmpy      #0
                     beq       load_done
                     lbsr      advance_chs
+                    lbcs      boot_error
                     bra       load_ioserver
 
 load_done
@@ -170,8 +176,8 @@ init_mmr            sta       ,x+
 
 * Advance 2D CHS in raw-image order:
 *   Tn/H0/S1..16, Tn/H1/S1..16, T(n+1)/H0/S1...
-* The MiniFDC accepts the desired cylinder directly in its track register;
-* NitrOS-9 uses the same scheme and does not issue a SEEK command here.
+* Side changes need no head motion.  On a cylinder boundary, seek the
+* physical head using the ROM-compatible MiniFDC SEEK sequence.
 advance_chs         inc       >FM11_FDC_SECTOR
                     lda       >FM11_FDC_SECTOR
                     cmpa      #SECTORS_PER_SIDE+1
@@ -181,11 +187,35 @@ advance_chs         inc       >FM11_FDC_SECTOR
                     lda       >FM11_FDC_SIDE
                     beq       select_side1
                     clr       >FM11_FDC_SIDE
-                    inc       >FM11_FDC_TRACK
+                    lbsr      seek_next_track
                     rts
 select_side1        lda       #1
                     sta       >FM11_FDC_SIDE
-chs_done            rts
+chs_done            andcc     #$FE
+                    rts
+
+* Seek one cylinder outward.  The FM-11 ROM IPL uses command $1B: put the
+* destination cylinder in the MiniFDC data register, issue SEEK, wait only
+* on BUSY while the Type-I command is active, then inspect the final status.
+seek_next_track     lda       >FM11_FDC_TRACK
+                    inca
+                    sta       >FM11_FDC_DATA
+                    lda       #FDC_SEEK
+                    sta       >FM11_FDC_CMD
+                    ldu       #$FFFF
+seek_wait           lda       >FM11_FDC_CMD
+                    bita      #FDC_BUSY
+                    beq       seek_done
+                    leau      -1,u
+                    cmpu      #0
+                    bne       seek_wait
+seek_fail           orcc      #$01
+                    rts
+seek_done           lda       >FM11_FDC_CMD
+                    bita      #FDC_ERRMASK
+                    bne       seek_fail
+                    andcc     #$FE
+                    rts
 
 * DMA one 256-byte physical sector directly to DMA-bank:X and advance X.
 * The caller owns FM11_DMA0_BANK so the same routine can target bank 0 for
