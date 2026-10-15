@@ -1,0 +1,3 @@
+build/
+external/cpm22/*.bin
+!external/cpm22/README.md
