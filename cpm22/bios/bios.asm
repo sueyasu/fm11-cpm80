@@ -4,7 +4,8 @@
 ;   CCP  = C400h
 ;   BDOS = CC00h
 ;   BIOS = DA00h
-;   6809 resident service starts at DE00h
+;   6809 resident service = DE00h-EBFFh
+;   mailbox              = EC00h
 ;
 ; Intel 8080 syntax for asm8080.
 
@@ -14,9 +15,8 @@ CCPBASE         equ     0C400h
 BDOSENT         equ     0CC06h
 BIOSBASE        equ     0DA00h
 
-; CP/M mutable disk workspace lives in RAM shared with the 6809 service,
-; but outside the service's DE00-EFFF code reservation.  These addresses
-; do not emit bytes into the BIOS image.
+; CP/M mutable disk workspace lives in fixed RAM above the shared service
+; area. These addresses do not emit bytes into the BIOS image.
 DIRBUF          equ     0F000h
 CSV0            equ     0F080h
 CSV1            equ     CSV0+32
@@ -136,7 +136,7 @@ home:
         lxi     b,0
         jmp     settrk
 
-; C = CP/M drive number.  A:-D: are 2D, E:-H: are 2HD.
+; C = CP/M drive number. A:-D: are 2D, E:-H: are 2HD.
 ; Returns HL=DPH or HL=0 if unsupported.
 seldsk:
         mov     a,c
@@ -185,7 +185,7 @@ write:
         mvi     a,MBCMD_WRITE
         jmp     disk_call
 
-; BC = logical sector, DE = translation table.  No skew table initially.
+; BC = logical sector, DE = translation table. No skew table initially.
 sectran:
         mov     h,b
         mov     l,c
