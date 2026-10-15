@@ -24,6 +24,25 @@ MBCMD_WBOOT     equ     $03
 MBSTAT_OK       equ     $00
 MBSTAT_ERROR    equ     $01
 
-* FDC bases confirmed from the Fujitsu CP/M image and emulator source.
-MINIFDC         equ     $FD18       * 2D, A:-D:
-STDFDC          equ     $FD30       * 2HD, E:-H:
+* Mini FDC, used by the 2D drives A:-D:.
+MINIFDC         equ     $FD18
+MINIFDC_STATUS  equ     MINIFDC+0      * read status / write command
+MINIFDC_TRACK   equ     MINIFDC+1
+MINIFDC_SECTOR  equ     MINIFDC+2
+MINIFDC_DATA    equ     MINIFDC+3
+MINIFDC_SIDE    equ     MINIFDC+4      * bit 0 = side
+MINIFDC_DRIVE   equ     MINIFDC+5      * bits 0-1 = drive
+MINIFDC_AUX     equ     MINIFDC+6
+MINIFDC_IRQ     equ     MINIFDC+7      * read acknowledges FDC IRQ
+
+FDC_CMD_READSEC equ     $80
+FDC_ST_BUSY     equ     $01
+FDC_ST_DRQ      equ     $02
+FDC_ST_LOST     equ     $04
+FDC_ST_CRC      equ     $08
+FDC_ST_RNF      equ     $10
+FDC_ST_NOTRDY   equ     $80
+FDC_READERR     equ     FDC_ST_LOST+FDC_ST_CRC+FDC_ST_RNF+FDC_ST_NOTRDY
+
+* Standard FDC, reserved for the 2HD drives E:-H: (not implemented yet).
+STDFDC          equ     $FD30
