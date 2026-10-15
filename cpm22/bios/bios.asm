@@ -82,6 +82,11 @@ boot:
 ; Reload CCP+BDOS from the reserved system tracks on the boot disk.
 ; CP/M page zero byte 0004h is uuuudddd: high nibble = user number,
 ; low nibble = current drive.  CCP requires that complete byte in C on entry.
+;
+; A fatal BDOS disk error can leave 0004h naming the drive that failed.  Before
+; restoring a non-A: drive after WBOOT, probe its first data track.  If the
+; drive/media is unavailable, fall back to A:, whose availability has already
+; been proven by the successful system reload above.
 wboot:
         ld      a,(0004h)
         ld      (wbootinfo),a
@@ -89,13 +94,38 @@ wboot:
         ld      a,MBCMD_WBOOT
         call    mbox_simple
         or      a
-        jr      nz,.wboot_retry ; retry on media/FDC error
+        jr      nz,.wboot_retry ; retry on boot-media/FDC error
 
         ld      a,(wbootinfo)
-        ld      (0004h),a
-        ld      c,a             ; preserve full CCP user/current-drive context
         and     00Fh
-        ld      (curdrv),a      ; BIOS disk path needs only the drive number
+        cp      8
+        jr      nc,.wboot_fallback
+        or      a
+        jr      z,.wboot_drive_ok
+
+        ld      (curdrv),a
+        ld      bc,2            ; OFF=2 for both supported floppy formats
+        ld      (curtrk),bc
+        ld      bc,0
+        ld      (cursec),bc
+        ld      hl,DIRBUF
+        ld      (curdma),hl
+        ld      a,MBCMD_READ
+        call    disk_call
+        or      a
+        jr      z,.wboot_drive_ok
+
+.wboot_fallback:
+        ld      a,(wbootinfo)
+        and     0F0h            ; preserve user, select boot drive A:
+        ld      (wbootinfo),a
+
+.wboot_drive_ok:
+        ld      a,(wbootinfo)
+        ld      (0004h),a
+        ld      c,a
+        and     00Fh
+        ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl
         call    setvec
