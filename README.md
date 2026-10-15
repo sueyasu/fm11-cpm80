@@ -38,13 +38,14 @@ The repository contains:
 - resident 6809 I/O-service dispatcher at `$DE00`
 - functional Mini FDC PIO READ path for A:-D: 2D drives
 - logical 128-byte to physical 256-byte sector deblocking
-- position-independent 6809 stage-2 cold loader with embedded CP/M and I/O-server payloads
-- 2D CP/M filesystem builder with D88 and raw-image output
+- FM-11 ROM-loaded 2D stage-1 IPL at `$0400`
+- position-independent 6809 stage-2 cold loader at `$4000`
+- bootable-layout 2D CP/M filesystem builder with D88 and raw-image output
 - Makefile with binary-size/layout checks
 
-The generated D88 currently reserves its first `$0200` bytes for the not-yet-implemented stage-1 IPL, so the image is structurally complete but not yet bootable.
+The stage-1 IPL follows the working FM-11 NitrOS-9 2D boot convention: the ROM loads T0/H0/S1-S2 to `$0400`, then stage 1 loads T0/H0/S3 through T1/H1/S16 to `$4000` and starts stage 2.
 
-WRITE, 2HD Standard-FDC transfer, warm boot reload, and the final stage-1 boot-track IPL remain to be implemented.
+WRITE, 2HD Standard-FDC transfer, and warm-boot reload remain to be implemented.
 
 ## Source layout
 
@@ -52,7 +53,7 @@ WRITE, 2HD Standard-FDC transfer, warm boot reload, and the final stage-1 boot-t
 cpm22/bios/        Z80 CP/M 2.2 BIOS
 include/z80/       Z80-side FM-11 definitions
 include/6809/      6809-side FM-11 definitions
-m6809/             cold loader and resident I/O service
+m6809/             stage-1 IPL, stage-2 loader and resident I/O service
 tools/             build/layout and disk-image helpers
 external/cpm22/    local, untracked CCP+BDOS input
 external/commands/ local, untracked CP/M command binaries

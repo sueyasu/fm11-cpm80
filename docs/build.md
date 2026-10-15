@@ -13,53 +13,39 @@ On Ubuntu, install the Z80 assembler with:
 sudo apt install z80asm
 ```
 
-The BIOS is written in native Z80 syntax. `z80asm` is invoked with a raw binary output plus listing and label files. Its `org` directive changes the logical assembly address but does not pad the output file up to that address, which lets the BIOS be assembled at `DA00h` while still producing a compact `bios.bin`.
-
 ## External CCP + BDOS
 
-The initial port is a Fujitsu-style **56K CP/M 2.2** system, not a 62K system. The build expects:
+The initial port is a Fujitsu-style **56K CP/M 2.2** system. The build expects:
 
 ```text
 external/cpm22/ccpbdos56.bin
 ```
 
-It must be exactly `1600h` (5632) bytes and represent:
+It must be exactly `1600h` (5632) bytes and represents CCP at `$C400` followed
+by BDOS through `$D9FF`. The new BIOS is assembled at `$DA00`.
 
-```text
-C400-CBFF  CCP
-CC00-D9FF  BDOS
-DA00-      BIOS built from cpm22/bios/bios.asm
-```
-
-The build rejects a binary of any other size.
-
-### Extracting it from the Fujitsu 2D image
-
-The supplied Fujitsu CP/M image already contains the correct 56K CCP+BDOS. Keep that original image outside Git at:
+To extract the 56K CCP+BDOS from the locally owned Fujitsu 2D image, place it at:
 
 ```text
 external/reference/cpm2d00.img
 ```
 
-Then run:
+then run:
 
 ```sh
 make extract-core
 ```
 
-The extractor copies image offsets `0200h-17FFh` to `external/cpm22/ccpbdos56.bin`. Neither the original image nor the extracted binary is tracked by Git.
-
-A conventional 62K CP/M layout would put CCP near `DC00`, BDOS near `E400`, and BIOS near `F200`. On the FM-11 port that would overlap the resident 6809 I/O service beginning at `DE00`, so a 62K CCP/BDOS image is not currently usable.
-
 ## External CP/M commands
 
-Place any command binaries to be installed on the generated disk in:
+Place optional `.COM` files in:
 
 ```text
 external/commands/
 ```
 
-Only `.COM` files are imported. They are not tracked by Git. See `external/commands/README.md` and `docs/disk-image.md`.
+They are installed in user area 0 of the generated disk and are not tracked by
+Git.
 
 ## Memory ownership above BDOS
 
@@ -73,20 +59,9 @@ F248-FBFF  reserved/free shared RAM
 FC00-FFFF  Z80 I/O space
 ```
 
-The explicit `EBFF` limit prevents the 6809 server image from overwriting the mailbox at `EC00`. The BIOS points its mutable disk workspace directly at the `F000` region; it does not emit that workspace into `bios.bin`.
-
 ## Build
 
-If the external CCP+BDOS has already been prepared:
-
 ```sh
-make
-```
-
-Starting from the Fujitsu reference image:
-
-```sh
-make extract-core
 make
 ```
 
@@ -98,28 +73,25 @@ make bios
 make ioserver
 make system
 make loader
+make ipl
 make image
 make extract-core
 make clean
 ```
 
-Outputs are written under `build/`:
+Outputs include:
 
 ```text
 build/z80/bios.bin
-build/z80/bios.lst
-build/z80/bios.sym
 build/6809/ioserver.bin
-build/6809/ioserver.lst
 build/6809/loader.bin
-build/6809/loader.lst
+build/6809/ipl_2d.bin
 build/cpm22/system56.bin
 build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2d.d88
 ```
 
-`system56.bin` covers the Z80 address range `C400-DDFF`: the supplied CCP+BDOS followed by the new BIOS padded to `DE00`.
-
-`loader.bin` is the position-independent stage-2 cold image. It contains its own copy of `system56.bin` and `ioserver.bin`; when executed by the 6809 it installs both at their final addresses, prepares the Z80 reset vector, and transfers control through the resident I/O server. See `docs/coldboot.md` for the stage-1 loading constraint.
-
-The D88 image is currently a correctly formatted 2D CP/M filesystem containing the stage-2 payload and optional `.COM` files. The first `0200h` bytes of the system area are reserved for the stage-1 IPL, so the generated image is not bootable until that IPL is implemented.
+`ipl_2d.bin` is the 512-byte-maximum ROM-loaded stage 1 assembled for `$0400`.
+`loader.bin` is the position-independent stage 2. The generated D88 contains
+both stages and is intended to boot directly on the FM-11 2D boot path. See
+`docs/coldboot.md` and `docs/disk-image.md` for the exact sector layout.

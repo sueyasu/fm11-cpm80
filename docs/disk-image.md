@@ -1,6 +1,6 @@
 # 2D disk image build
 
-`make image` builds a Fujitsu-compatible 2D CP/M disk in D88 format:
+`make image` builds a bootable Fujitsu-compatible 2D CP/M disk in D88 format:
 
 ```text
 build/images/fm11-cpm80-2d.d88
@@ -15,8 +15,6 @@ build/images/fm11-cpm80-2d.raw
 
 ## Geometry
 
-The image uses the format described by the 2D DPB in the BIOS:
-
 ```text
 40 cylinders
 2 heads
@@ -28,24 +26,24 @@ The image uses the format described by the 2D DPB in the BIOS:
 The D88 image uses media type `00h` (2D), 80 formatted track entries, 16
 sectors per track entry, and 256-byte sectors.
 
-## Reserved system area
+## Boot/system area
 
-The first two cylinders are reserved by DPB `OFF=2`, giving a 16 KiB system
-area at raw offsets `0000h-3FFFh`.
+DPB `OFF=2` reserves the first two cylinders, giving a 16 KiB system area at
+raw offsets `$0000-$3FFF`.
 
 ```text
-0000-01FF  reserved for the stage-1 IPL (not implemented yet)
+0000-01FF  stage-1 IPL (ROM loads this to 6809 $0400)
 0200-3FFF  position-independent stage-2 loader.bin
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
 
-The D88 builder rejects a stage-2 image larger than `3E00h` bytes.
+The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. Stage 1 then reads
+the remaining 62 system-area sectors, T0/H0/S3 through T1/H1/S16, to
+`$4000-$7DFF` and jumps to `$4000`.
 
-Because stage 1 has not yet been implemented, the D88 produced by this commit
-contains a valid CP/M filesystem and the stage-2 payload but is **not yet
-bootable**.  The next boot-track step will fill the reserved first `0200h`
-bytes and load stage 2 from the remaining reserved system sectors.
+The image builder rejects an IPL larger than `$0200` bytes or a stage-2 image
+larger than `$3E00` bytes.
 
 ## Adding CP/M commands
 
@@ -55,10 +53,10 @@ Place local command binaries in:
 external/commands/
 ```
 
-Only `.COM` files are imported.  Names are converted to upper case and must fit
-CP/M 8.3 naming rules.  They are installed in user area 0.
+Only `.COM` files are imported. Names are converted to upper case and must fit
+CP/M 8.3 naming rules. They are installed in user area 0.
 
-The builder implements the current 2D DPB exactly:
+The builder implements the current 2D DPB:
 
 ```text
 BSH=4       2 KiB allocation blocks
@@ -70,5 +68,4 @@ OFF=2       two reserved cylinders
 ```
 
 Files larger than 32 KiB are split across multiple CP/M directory extents.
-Allocation is currently deterministic and sequential, which is sufficient for
-building fresh system disks.
+Allocation is deterministic and sequential.

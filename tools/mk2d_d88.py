@@ -11,8 +11,8 @@ RAW_SIZE = CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 
 SYSTEM_CYLINDERS = 2
 SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
-STAGE1_RESERVED = 0x0200
-STAGE2_MAX = SYSTEM_SIZE - STAGE1_RESERVED
+STAGE1_SIZE = 0x0200
+STAGE2_MAX = SYSTEM_SIZE - STAGE1_SIZE
 
 BLOCK_SIZE = 2048
 TOTAL_BLOCKS = 152          # DPB DSM=151 -> blocks 0..151
@@ -76,9 +76,6 @@ def write_cpm_files(raw: bytearray, files):
         blocks = list(range(next_block, next_block + blocks_needed))
         next_block += blocks_needed
 
-        # Deterministic padding beyond the last record.  CP/M stores file
-        # lengths in 128-byte records, so bytes after the file data in the
-        # final record are not significant to a COM program.
         for block in blocks:
             off = SYSTEM_SIZE + block * BLOCK_SIZE
             raw[off:off + BLOCK_SIZE] = b"\x1a" * BLOCK_SIZE
@@ -104,11 +101,6 @@ def write_cpm_files(raw: bytearray, files):
                 raise ValueError(f"directory full while adding {path.name}")
 
             chunk_records = (chunk_bytes + RECORD_SIZE - 1) // RECORD_SIZE
-
-            # EXM=1: one physical directory entry represents up to two
-            # logical 16 KiB extents.  EX stores the last logical extent
-            # represented by the entry; RC stores records in that logical
-            # extent.  A full 32 KiB entry is therefore EX=base+1, RC=128.
             logical_base = physical_extent * 2
             if chunk_records > 128:
                 extent_no = logical_base + 1
@@ -133,21 +125,24 @@ def write_cpm_files(raw: bytearray, files):
             next_dir += 1
 
 
-def make_raw(loader: bytes, files):
+def make_raw(ipl: bytes, loader: bytes, files):
+    if len(ipl) > STAGE1_SIZE:
+        raise ValueError(
+            f"ipl_2d.bin is {len(ipl)} bytes; maximum is {STAGE1_SIZE}")
     if len(loader) > STAGE2_MAX:
         raise ValueError(
             f"loader.bin is {len(loader)} bytes; maximum is {STAGE2_MAX} "
-            f"bytes after the 0x200-byte stage-1 reservation")
+            f"bytes after the 0x200-byte stage-1 area")
 
     raw = bytearray(b"\xe5" * RAW_SIZE)
 
-    # The first two cylinders are the CP/M system area (DPB OFF=2).
-    # Reserve the first 0x200 bytes for the future stage-1 IPL and place
-    # the position-independent stage-2 image immediately after it.
+    # OFF=2 reserves the first two cylinders as a 16 KiB system area.
+    # FM-11 ROM loads its first 512 bytes (T0/H0/S1-S2) to $0400.
+    # Stage 1 then reads the remaining 62 sectors into $4000.
     raw[:SYSTEM_SIZE] = b"\x00" * SYSTEM_SIZE
-    raw[STAGE1_RESERVED:STAGE1_RESERVED + len(loader)] = loader
+    raw[:len(ipl)] = ipl
+    raw[STAGE1_SIZE:STAGE1_SIZE + len(loader)] = loader
 
-    # Empty CP/M directory occupies allocation blocks 0 and 1.
     raw[SYSTEM_SIZE:SYSTEM_SIZE + DIR_SIZE] = b"\xe5" * DIR_SIZE
     write_cpm_files(raw, files)
     return raw
@@ -198,6 +193,7 @@ def make_d88(raw: bytes, label: str):
 
 def main():
     ap = argparse.ArgumentParser(description="Build an FM-11 CP/M-80 2D D88 image")
+    ap.add_argument("--ipl", required=True, type=Path)
     ap.add_argument("--loader", required=True, type=Path)
     ap.add_argument("--commands", required=True, type=Path)
     ap.add_argument("--output", required=True, type=Path)
@@ -205,9 +201,10 @@ def main():
     ap.add_argument("--label", default="FM11 CPM80")
     args = ap.parse_args()
 
+    ipl = args.ipl.read_bytes()
     loader = args.loader.read_bytes()
     files = command_files(args.commands)
-    raw = make_raw(loader, files)
+    raw = make_raw(ipl, loader, files)
     d88 = make_d88(raw, args.label)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +214,8 @@ def main():
         args.raw_output.write_bytes(raw)
 
     print(f"{args.output}: {len(d88)} bytes, {len(files)} command file(s)")
-    print(f"stage2: raw offset 0x{STAGE1_RESERVED:04x}, {len(loader)} bytes")
+    print(f"stage1: raw offset 0x0000, {len(ipl)} bytes")
+    print(f"stage2: raw offset 0x{STAGE1_SIZE:04x}, {len(loader)} bytes")
     for path in files:
         print(f"  {path.name}")
 
