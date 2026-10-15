@@ -13,7 +13,7 @@ Typical installation for `asm8080`:
 npm install -g asm8080
 ```
 
-`lwasm` is invoked with raw output and a listing/symbol table.  The Z80 BIOS
+`lwasm` is invoked with raw output and a listing/symbol table. The Z80 BIOS
 uses Intel 8080 mnemonics because `asm8080` is intentionally an 8080, not a
 Z80, assembler.
 
@@ -37,21 +37,25 @@ DA00-      BIOS built from cpm22/bios/bios.asm
 The build rejects a binary of any other size.
 
 A conventional 62K CP/M layout would put CCP near `DC00`, BDOS near `E400`,
-and BIOS near `F200`.  On the FM-11 port that would overlap the resident 6809
-I/O service at `DE00-EFFF`, so a 62K CCP/BDOS image is not currently usable.
+and BIOS near `F200`. On the FM-11 port that would overlap the resident 6809
+I/O service beginning at `DE00`, so a 62K CCP/BDOS image is not currently
+usable.
 
 ## Memory ownership above BDOS
 
 ```text
 DA00-DDFF  Z80 CP/M BIOS (maximum 1 KiB)
-DE00-EFFF  resident 6809 I/O server (maximum 4608 bytes)
-EC00-EC09  mailbox fields reserved inside the shared area
+DE00-EBFF  resident 6809 I/O server (maximum 0E00h = 3584 bytes)
+EC00-EC09  Z80/6809 mailbox
+EC0A-EFFF  reserved for future shared service data
 F000-F247  CP/M DIRBUF / CSV / ALV workspace
+F248-FBFF  reserved/free shared RAM
 FC00-FFFF  Z80 I/O space
 ```
 
-The BIOS points its mutable disk workspace directly at the `F000` region; it
-does not emit that workspace into `bios.bin`.
+The explicit `EBFF` limit prevents the 6809 server image from overwriting the
+mailbox at `EC00`. The BIOS points its mutable disk workspace directly at the
+`F000` region; it does not emit that workspace into `bios.bin`.
 
 ## Build
 
@@ -62,6 +66,7 @@ make
 Useful individual targets:
 
 ```sh
+make check-tools
 make bios
 make ioserver
 make loader
