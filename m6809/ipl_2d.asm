@@ -6,11 +6,11 @@
 * RAM addresses, beginning at $C400:
 *
 *   $C400-$DDFF  CCP + BDOS + BIOS (system56.bin, $1A00 bytes)
-*   $DE00-$EBFF  resident 6809 I/O server slot ($0E00 bytes)
+*   $DE00-       resident 6809 I/O server (maximum $0400 bytes here)
 *
-* The disk image stores those regions contiguously from raw offset $0200,
-* so the IPL reads 40 physical sectors beginning at T0/H0/S3 directly to
-* $C400-$EBFF.  The final 10 sectors are on cylinder 1 and require SEEK.
+* The disk image stores those regions contiguously from raw offset $0200.
+* The complete direct-load image must fit in the remaining 30 sectors of
+* cylinder 0, so the IPL never performs SEEK/STEP during cold boot.
 ********************************************************************
 
                     org       $0400
@@ -23,16 +23,14 @@ FM11_FDC_SIDE       equ       $FD1C
 FM11_FDC_DRIVE      equ       $FD1D
 FM11_DMA0_MODE      equ       $FD50
 
-FDC_SEEK            equ       $10
 FDC_READSEC         equ       $80
-FDC_BUSY            equ       $01
 FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
 STAGE1_STACK        equ       $2000
 SYSTEM_DEST         equ       $C400
-SYSTEM_SECTORS      equ       40
+SYSTEM_SECTORS      equ       30
 SECTORS_PER_SIDE    equ       16
 
 MBOX_BASE           equ       $EC00
@@ -54,7 +52,7 @@ main                orcc      #$50
                     sta       >FM11_DMA0_MODE
 
 * The ROM has already read T0/H0/S1-S2.  The direct-load system image
-* starts at S3 and is contiguous in raw-image order.
+* starts at S3 and remains entirely within cylinder 0.
                     clr       >FM11_FDC_TRACK
                     clr       >FM11_FDC_SIDE
                     lda       #3
@@ -68,7 +66,6 @@ load_loop           lbsr      read_sector
                     cmpy      #0
                     beq       load_done
                     lbsr      advance_chs
-                    lbcs      boot_error
                     bra       load_loop
 
 load_done
@@ -103,44 +100,17 @@ clear_workspace     sta       ,x+
 * IoServerStart performs the initial FD05 hand-off to the Z80.
                     jmp       IOSERVER_BASE
 
-* Advance 2D CHS in raw-image order:
-*   Tn/H0/S1..16, Tn/H1/S1..16, T(n+1)/H0/...
+* Advance only within cylinder 0:
+*   T0/H0/S3..16, then T0/H1/S1..16.
 advance_chs         inc       >FM11_FDC_SECTOR
                     lda       >FM11_FDC_SECTOR
                     cmpa      #SECTORS_PER_SIDE+1
-                    blo       chs_ok
+                    blo       chs_done
                     lda       #1
                     sta       >FM11_FDC_SECTOR
-                    lda       >FM11_FDC_SIDE
-                    beq       select_side1
-                    clr       >FM11_FDC_SIDE
-                    lbsr      seek_next_track
-                    rts
-select_side1        lda       #1
+                    lda       #1
                     sta       >FM11_FDC_SIDE
-chs_ok              andcc     #$FE
-                    rts
-
-* SEEK to the next cylinder.  WD17xx SEEK takes the destination track in
-* the data register and updates the track register when the seek completes.
-seek_next_track     lda       >FM11_FDC_TRACK
-                    inca
-                    sta       >FM11_FDC_DATA
-                    lda       #FDC_SEEK
-                    sta       >FM11_FDC_CMD
-                    ldu       #$FFFF
-seek_wait           lda       >FM11_FDC_CMD
-                    bita      #FDC_ERRMASK
-                    bne       seek_fail
-                    bita      #FDC_BUSY
-                    beq       seek_done
-                    leau      -1,u
-                    cmpu      #0
-                    bne       seek_wait
-seek_fail           orcc      #$01
-                    rts
-seek_done           andcc     #$FE
-                    rts
+chs_done            rts
 
 * Read one 256-byte physical sector to ,X and advance X.
 read_sector         lda       #FDC_READSEC
