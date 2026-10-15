@@ -8,14 +8,16 @@
 *   disk $0200-$1BFF -> physical $0DC00-$0F5FF
 *       CCP + BDOS + BIOS (system62.bin, $1A00 bytes)
 *
-*   disk $1C00-$1FFF -> physical $10000-$103FF
-*       resident 6809 I/O server slot (maximum $0400 bytes)
+*   disk $1C00-$23FF -> physical $10000-$107FF
+*       resident 6809 I/O server slot (maximum $0800 bytes)
 *
 * The I/O server is linked at logical $E000.  Before entering it, MMR14
 * maps logical $E000-$EFFF to physical $10000-$10FFF.  Logical page D
 * remains identity-mapped so the 62K CP/M TPA can extend through $DBFF.
-* The complete disk stream still fits in the remaining 30 sectors of
-* cylinder 0, so the IPL never performs SEEK/STEP during cold boot.
+* The I/O-server load crosses from T0/H1/S16 to T1/H0/S1.  As in the
+* NitrOS-9 MiniFDC driver, cylinder selection is performed by writing the
+* desired cylinder directly to the MiniFDC track register; no SEEK command
+* is issued.
 ********************************************************************
 
                     org       $0400
@@ -53,7 +55,7 @@ SYSTEM_DEST         equ       $DC00
 SYSTEM_SECTORS      equ       26
 IOSERVER_DMA_ADDR   equ       $0000      * physical $10000, bank=1
 IOSERVER_DMA_BANK   equ       $01
-IOSERVER_SECTORS    equ       4
+IOSERVER_SECTORS    equ       8
 SECTORS_PER_SIDE    equ       16
 
 MBOX_BASE           equ       $FBF6
@@ -91,7 +93,8 @@ load_system         lbsr      read_sector_dma
 
 system_loaded
 * Move from the last CP/M system sector (T0/H1/S12) to the first I/O-server
-* sector (T0/H1/S13), then redirect DMA to physical $10000.
+* sector (T0/H1/S13), then redirect DMA to physical $10000.  Eight sectors
+* end at T1/H0/S4 and fill physical $10000-$107FF.
                     lbsr      advance_chs
                     lda       #IOSERVER_DMA_BANK
                     sta       >FM11_DMA0_BANK
@@ -165,15 +168,22 @@ init_mmr            sta       ,x+
 * fixed-SRAM trampoline and performs the initial hand-off to the Z80.
                     jmp       IOSERVER_BASE
 
-* Advance only within cylinder 0:
-*   T0/H0/S3..16, then T0/H1/S1..16.
+* Advance 2D CHS in raw-image order:
+*   Tn/H0/S1..16, Tn/H1/S1..16, T(n+1)/H0/S1...
+* The MiniFDC accepts the desired cylinder directly in its track register;
+* NitrOS-9 uses the same scheme and does not issue a SEEK command here.
 advance_chs         inc       >FM11_FDC_SECTOR
                     lda       >FM11_FDC_SECTOR
                     cmpa      #SECTORS_PER_SIDE+1
                     blo       chs_done
                     lda       #1
                     sta       >FM11_FDC_SECTOR
-                    lda       #1
+                    lda       >FM11_FDC_SIDE
+                    beq       select_side1
+                    clr       >FM11_FDC_SIDE
+                    inc       >FM11_FDC_TRACK
+                    rts
+select_side1        lda       #1
                     sta       >FM11_FDC_SIDE
 chs_done            rts
 

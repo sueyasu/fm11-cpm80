@@ -11,13 +11,12 @@ RAW_SIZE = CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 
 SYSTEM_CYLINDERS = 2
 SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
-BOOT_CYLINDER_SIZE = HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 IPL_SIZE = 0x0200
 CPM_SYSTEM_OFFSET = IPL_SIZE
 CPM_SYSTEM_SIZE = 0x1A00
 IOSERVER_OFFSET = CPM_SYSTEM_OFFSET + CPM_SYSTEM_SIZE
-IOSERVER_SLOT_SIZE = BOOT_CYLINDER_SIZE - IOSERVER_OFFSET
-DIRECT_LOAD_SIZE = CPM_SYSTEM_SIZE + IOSERVER_SLOT_SIZE
+IOSERVER_SLOT_SIZE = 0x0800
+DIRECT_LOAD_END = IOSERVER_OFFSET + IOSERVER_SLOT_SIZE
 
 BLOCK_SIZE = 2048
 TOTAL_BLOCKS = 152          # DPB DSM=151 -> blocks 0..151
@@ -136,24 +135,23 @@ def make_raw(ipl: bytes, system: bytes, ioserver: bytes, files):
             f"ipl_2d.bin is {len(ipl)} bytes; maximum is {IPL_SIZE}")
     if len(system) != CPM_SYSTEM_SIZE:
         raise ValueError(
-            f"system56.bin is {len(system)} bytes; expected exactly "
+            f"system62.bin is {len(system)} bytes; expected exactly "
             f"{CPM_SYSTEM_SIZE} bytes")
     if len(ioserver) > IOSERVER_SLOT_SIZE:
         raise ValueError(
             f"ioserver.bin is {len(ioserver)} bytes; maximum is "
-            f"{IOSERVER_SLOT_SIZE} bytes while the direct-load IPL is "
-            f"restricted to cylinder 0")
-    if CPM_SYSTEM_OFFSET + DIRECT_LOAD_SIZE != BOOT_CYLINDER_SIZE:
-        raise ValueError("internal cylinder-0 direct-load layout mismatch")
+            f"{IOSERVER_SLOT_SIZE} bytes")
+    if DIRECT_LOAD_END > SYSTEM_SIZE:
+        raise ValueError("internal direct-load layout exceeds OFF=2 reservation")
 
     raw = bytearray(b"\xe5" * RAW_SIZE)
 
     # OFF=2 reserves the first two cylinders as a 16 KiB system area.
-    # The ROM loads the first 512 bytes to $0400. The IPL then reads only the
-    # remaining 30 physical sectors of cylinder 0 directly to $C400-$E1FF:
-    #   $0200-$1BFF  system56.bin -> Z80 $C400-$DDFF
-    #   $1C00-$1FFF  I/O server (up to 0x400 bytes) -> 6809 $DE00-$E1FF
-    # Cylinder 1 remains reserved and zero-filled.
+    # The ROM loads the first 512 bytes to $0400. The IPL then reads:
+    #   $0200-$1BFF  system62.bin -> Z80 physical $DC00-$F5FF
+    #   $1C00-$23FF  I/O server slot -> 6809 physical $10000-$107FF
+    # The I/O-server slot crosses from T0/H1/S16 to T1/H0/S1 and ends at S4.
+    # The rest of cylinder 1 remains reserved and zero-filled.
     raw[:SYSTEM_SIZE] = b"\x00" * SYSTEM_SIZE
     raw[:len(ipl)] = ipl
     raw[CPM_SYSTEM_OFFSET:CPM_SYSTEM_OFFSET + len(system)] = system
