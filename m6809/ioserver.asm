@@ -3,8 +3,16 @@
 * This code remains resident while CP/M runs on the Z80.  FDC access is
 * owned by the 6809; the Z80 BIOS communicates only through the EC00
 * mailbox and CPU hand-off at FD05.
+*
+* CPU hand-off is isolated in a small trampoline copied to $EC10 at cold
+* start.  The resident service itself remains at $DE00.  Every 6809 -> Z80
+* hand-off therefore stops the 6809 inside the trampoline; when the Z80
+* later returns control, execution resumes there and jumps back to
+* ServiceLoop.
 
         include "fm11.inc"
+
+TRAMPOLINE_BASE equ    $EC10
 
         org     $DE00
 
@@ -13,10 +21,19 @@ IoServerStart
         clr     MBOX_CMD
         clr     MBOX_STATUS
 
-IoServerArm
-        lda     #$01
-        sta     CPUCTL
-        nop
+* Install the hand-off trampoline in unused shared RAM above the mailbox.
+* $EC00-$EC09 is the mailbox; CP/M mutable workspace starts at $F000.
+        ldx     #TrampolineTemplate
+        ldy     #TRAMPOLINE_BASE
+        ldb     #TrampolineTemplateEnd-TrampolineTemplate
+InstallTrampoline
+        lda     ,x+
+        sta     ,y+
+        decb
+        bne     InstallTrampoline
+
+* Initial cold-boot hand-off uses the same path as all later service calls.
+        jmp     TRAMPOLINE_BASE
 
 ServiceLoop
         ldb     MBOX_CMD
@@ -84,10 +101,7 @@ ServiceWBoot
 
 ServiceDone
         clr     MBOX_CMD
-        lda     #$01
-        sta     CPUCTL
-        nop
-        bra     ServiceLoop
+        jmp     TRAMPOLINE_BASE
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -352,6 +366,16 @@ CwhLoop
         bne     CwhLoop
         andcc   #$FE
         rts
+
+* Runtime copy placed at $EC10.  The CPUCTL write stops the 6809.  When the
+* Z80 later writes CPUCTL=0, the 6809 resumes at the following NOP and then
+* enters the resident dispatcher through the fixed absolute jump.
+TrampolineTemplate
+        lda     #$01
+        sta     >CPUCTL
+        nop
+        jmp     ServiceLoop
+TrampolineTemplateEnd
 
 PhysTrack       rmb     1
 PhysSide        rmb     1
