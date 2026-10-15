@@ -33,7 +33,7 @@ ioserver: $(M6809_BUILD)/ioserver.bin
 
 $(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm include/6809/fm11.inc | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
-	$(PYTHON) tools/check_binary.py $@ --max-size 0x1200 --name "6809 I/O server (DE00-EFFF)"
+	$(PYTHON) tools/check_binary.py $@ --max-size 0xE00 --name "6809 I/O server (DE00-EBFF)"
 
 loader: $(M6809_BUILD)/loader.bin
 
