@@ -45,11 +45,15 @@ $(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm include/6809/fm11.inc | $(M6809_
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x800 --name "6809 I/O server disk slot (logical E000-E7FF, physical 10000-107FF)"
 
-ipl: $(M6809_BUILD)/ipl_2d.bin
+ipl: $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/ipl_2hd.bin
 
 $(M6809_BUILD)/ipl_2d.bin: m6809/ipl_2d.asm | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw --list=$(M6809_BUILD)/ipl_2d.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "FM-11 2D IPL (0400-05FF)"
+
+$(M6809_BUILD)/ipl_2hd.bin: m6809/ipl_2hd.asm include/6809/fm11.inc | $(M6809_BUILD)
+	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ipl_2hd.lst --symbols -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "FM-11 2HD IPL (0400-05FF)"
 
 extract-core: $(FUJITSU_CPM_IMAGE) tools/extract_fujitsu_core.py
 	$(PYTHON) tools/extract_fujitsu_core.py $(FUJITSU_CPM_IMAGE) $(CPM22_FUJITSU_CORE)
@@ -73,8 +77,11 @@ $(D88_IMAGE_2D): $(M6809_BUILD)/ipl_2d.bin $(CPM_BUILD)/system62.bin $(M6809_BUI
 		--raw-output $(RAW_IMAGE_2D) \
 		--label "FM11 CPM80"
 
-$(D88_IMAGE_2HD): tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+$(D88_IMAGE_2HD): $(M6809_BUILD)/ipl_2hd.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
 	$(PYTHON) tools/mk2hd_d88.py \
+		--ipl $(M6809_BUILD)/ipl_2hd.bin \
+		--system $(CPM_BUILD)/system62.bin \
+		--ioserver $(M6809_BUILD)/ioserver.bin \
 		--commands $(COMMANDS_DIR) \
 		--output $@ \
 		--raw-output $(RAW_IMAGE_2HD) \

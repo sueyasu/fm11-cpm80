@@ -4,14 +4,8 @@
 * RAM.  The IPL loads it at physical $10000 and maps logical $E000-$EFFF to
 * physical $10000-$10FFF through MMR14.
 *
-* Logical page D is reserved as a temporary 6809 window onto arbitrary Z80
-* physical bank-0 pages.  CP/M DMA buffers are therefore accessed by physical
-* address rather than by assuming the current 6809 logical map matches Z80.
-*
-* CPU hand-off is isolated in a small trampoline copied to the FM-11
-* CPU-card fixed SRAM at $FE00.  That SRAM remains visible independently
-* of the MMR, so the hand-off point is stable while the private service
-* mapping is active.
+* A on entry identifies the boot floppy family: 0=2D Mini FDC, 1=2HD
+* Standard FDC.  A:-D: always map to the boot family and E:-H: to the other.
 
         include "fm11.inc"
 
@@ -29,12 +23,12 @@ SYSTEM_TRACK    equ    1
         org     $E000
 
 IoServerStart
-        orcc    #$50            * mask IRQ/FIRQ while establishing service
-        clr     BOOTTYPE        * current IPL is the 2D boot path
+        orcc    #$50
+        anda    #$01
+        sta     BOOTTYPE
         clr     MBOX_CMD
         clr     MBOX_STATUS
 
-* Install the hand-off trampoline in MMR-independent CPU-card SRAM.
         ldx     #TrampolineTemplate
         ldy     #TRAMPOLINE_BASE
         ldb     #TrampolineTemplateEnd-TrampolineTemplate
@@ -44,13 +38,9 @@ InstallTrampoline
         decb
         bne     InstallTrampoline
 
-* The ROM-loaded IPL intentionally stays on cylinder 0.  Once the complete
-* resident service is running from private RAM, initialize the Mini FDC and
-* load the single CP/M system image from cylinder 1.
         lbsr    ColdBootLoadSystem
         bcs     ColdBootFail
 
-* Clear mutable CP/M disk workspace after the system image is resident.
         ldx     #CPM_WORK_BASE
         ldu     #CPM_WORK_LEN
         clra
@@ -60,8 +50,6 @@ ColdClearWorkspace
         cmpu    #0
         bne     ColdClearWorkspace
 
-* Z80 is released from WAIT with PC=0000. Install JP $F200 and clear the
-* following page-zero bytes used by the initial cold entry.
         lda     #$C3
         sta     >$0000
         ldd     #$00F2
@@ -71,8 +59,6 @@ ColdClearWorkspace
         sta     >$0004
         clr     MBOX_CMD
         clr     MBOX_STATUS
-
-* Initial cold-boot hand-off uses the same fixed-SRAM path as later calls.
         jmp     TRAMPOLINE_BASE
 
 ColdBootFail
@@ -100,7 +86,6 @@ ServiceRead
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-
         lda     PhysIs2HD
         bne     ServiceRead2HD
         lbsr    MiniFdcReadSector
@@ -111,7 +96,6 @@ ServiceReadCopy
         lbcs    ServiceBad
         lbsr    CopyReadHalfToDma
         lbcs    ServiceBad
-
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
@@ -123,9 +107,6 @@ ServiceWrite
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-
-* All floppy formats use 256-byte physical sectors while CP/M writes 128-byte
-* records. Preserve the neighbouring record with a read/modify/write cycle.
         lda     PhysIs2HD
         bne     ServiceWrite2HD
         lbsr    MiniFdcReadSector
@@ -142,7 +123,6 @@ ServiceWrite2HD
         lbsr    StdFdcWriteSector
 ServiceWriteDone
         lbcs    ServiceBad
-
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
@@ -152,7 +132,6 @@ ServiceWBoot
         lbcs    ServiceBad
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
 
 ServiceDone
         clr     MBOX_CMD
@@ -168,16 +147,12 @@ VdrBad
         orcc    #$01
         rts
 
-* Resolve logical CP/M drive letters into a physical controller family and
-* unit.  A:-D: always refer to the family used for boot, while E:-H: refer to
-* the other family.  The unit number within either family is always 0-3.
 ResolveLogicalDrive
         lda     MBOX_DRIVE
         cmpa    #8
         bhs     RldBad
         anda    #$03
         sta     PhysDrive
-
         lda     BOOTTYPE
         anda    #$01
         sta     PhysIs2HD
@@ -194,8 +169,6 @@ RldBad
         orcc    #$01
         rts
 
-* A CP/M logical record is 128 bytes.  Reject a DMA address whose complete
-* record would extend beyond the last Z80 RAM byte at $FBFF.
 ValidateDmaRange
         ldd     MBOX_DMA_H
         cmpd    #$FB80
@@ -206,23 +179,17 @@ VdmBad
         orcc    #$01
         rts
 
-* Convert a CP/M 128-byte logical sector to physical FDC geometry. The media
-* geometry comes from ResolveLogicalDrive rather than directly from the
-* logical drive number.
 DecodeLogicalSector
         lda     MBOX_TRACK_H
         bne     DlsBad
         lda     MBOX_TRACK_L
         sta     PhysTrack
-
         lda     MBOX_SECTOR_H
         bne     DlsBad
         ldb     MBOX_SECTOR_L
-
         lda     PhysIs2HD
         bne     Dls2HD
 
-* 2D: 40 cylinders, 64 records/cylinder, 32 records/side.
         lda     PhysTrack
         cmpa    #40
         bhs     DlsBad
@@ -238,7 +205,6 @@ DecodeLogicalSector
         bra     DlsHaveSide
 
 Dls2HD
-* 2HD: 77 cylinders, 104 records/cylinder, 52 records/side.
         lda     PhysTrack
         cmpa    #77
         bhs     DlsBad
@@ -261,7 +227,6 @@ DlsHaveSide
         stb     PhysSector
         andcc   #$FE
         rts
-
 DlsBad
         orcc    #$01
         rts
@@ -271,7 +236,6 @@ MiniFdcSelect
         anda    #$03
         ora     #MINIFDC_MOTOR
         sta     MINIFDC_DRIVE
-
         lda     PhysSide
         anda    #$01
         sta     MINIFDC_SIDE
@@ -281,8 +245,6 @@ MiniFdcSelect
         sta     MINIFDC_SECTOR
         rts
 
-* Wait for a Mini-FDC type-I command to finish.  During BUSY only bit 0 is
-* interpreted; seek/not-ready status is checked after command completion.
 MiniFdcWaitType1
         ldx     #$FFFF
 MftWait
@@ -304,26 +266,21 @@ MftFail
         orcc    #$01
         rts
 
-* Establish a known physical head position before reading the system image.
-* This is deliberately done here, after the ROM/IPL boot phase has ended.
 MiniFdcPrepareSystemTrack
         lda     #MINIFDC_MOTOR
         sta     MINIFDC_DRIVE
         clr     MINIFDC_SIDE
         lda     MINIFDC_IRQ
-
         lda     #FDC_CMD_RESTORE
         sta     MINIFDC_STATUS
         lbsr    MiniFdcWaitType1
         bcs     MfpFail
-
         lda     #SYSTEM_TRACK
         sta     MINIFDC_DATA
         lda     #FDC_CMD_SEEK
         sta     MINIFDC_STATUS
         lbsr    MiniFdcWaitType1
         bcs     MfpFail
-
         lda     MINIFDC_TRACK
         cmpa    #SYSTEM_TRACK
         bne     MfpFail
@@ -333,9 +290,6 @@ MfpFail
         orcc    #$01
         rts
 
-* Program DMA channel 0 for one 256-byte transfer to/from the private
-* I/O-server mapping.  X is a logical address in $E000-$EFFF; adding $2000
-* wraps to the low 16 bits of its physical $1xxxx address.
 MiniDmaSetupPrivate
         clr     DMA0_MODE
         tfr     x,d
@@ -344,13 +298,10 @@ MiniDmaSetupPrivate
         stb     DMA0_ADDR_L
         lda     #$01
         sta     DMA0_BANK
-        lda     #$01
         sta     DMA0_COUNT_H
         clr     DMA0_COUNT_L
         rts
 
-* Program DMA channel 0 for a physical bank-0 transfer at X.  Cold boot and
-* WBOOT use this path for the CP/M system image at $DC00-$F5FF.
 MiniDmaSetupBank0
         clr     DMA0_MODE
         clr     DMA0_BANK
@@ -362,13 +313,11 @@ MiniDmaSetupBank0
         clr     DMA0_COUNT_L
         rts
 
-* Start/complete one Mini-FDC physical-sector read after DMA has been set up.
 MiniFdcReadArmed
         lda     #DMA_READ_MODE
         sta     DMA0_MODE
         lda     #FDC_CMD_READSEC
         sta     MINIFDC_STATUS
-
         ldx     #$FFFF
 MfrWait
         lda     DMA0_MODE
@@ -383,7 +332,6 @@ MfrWait
         cmpx    #0
         bne     MfrWait
         bra     MfrFail
-
 MfrDone
         clr     DMA0_MODE
         lda     MINIFDC_STATUS
@@ -392,7 +340,6 @@ MfrDone
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
-
 MfrFail
         clr     DMA0_MODE
 MfrFailAck
@@ -400,8 +347,6 @@ MfrFailAck
         orcc    #$01
         rts
 
-* DMA one physical sector from Mini FDC to private PhysBuf.
-* X is scratch here; U is preserved for callers such as WarmBootReload.
 MiniFdcReadSector
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
@@ -409,7 +354,6 @@ MiniFdcReadSector
         lbsr    MiniDmaSetupPrivate
         bra     MiniFdcReadArmed
 
-* DMA one physical sector directly to physical bank 0 at WBootDest.
 MiniFdcReadWBoot
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
@@ -417,19 +361,15 @@ MiniFdcReadWBoot
         lbsr    MiniDmaSetupBank0
         bra     MiniFdcReadArmed
 
-* DMA private PhysBuf as one physical sector to the Mini FDC.
-* X is scratch; do not consume U so higher-level counters remain intact.
 MiniFdcWriteSector
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
-
         ldx     #PhysBuf
         lbsr    MiniDmaSetupPrivate
         lda     #DMA_WRITE_MODE
         sta     DMA0_MODE
         lda     #FDC_CMD_WRITESEC
         sta     MINIFDC_STATUS
-
         ldx     #$FFFF
 MfwWait
         lda     DMA0_MODE
@@ -444,7 +384,6 @@ MfwWait
         cmpx    #0
         bne     MfwWait
         bra     MfwFail
-
 MfwDone
         clr     DMA0_MODE
         lda     MINIFDC_STATUS
@@ -453,7 +392,6 @@ MfwDone
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
-
 MfwFail
         clr     DMA0_MODE
 MfwFailAck
@@ -461,10 +399,6 @@ MfwFailAck
         orcc    #$01
         rts
 
-* Select one of the four 2HD drives on the Standard FDC. ResolveLogicalDrive
-* has already converted the CP/M drive letter to controller unit 0-3.
-* Track 0's special boot format is never used by normal CP/M I/O because the
-* 2HD DPB has OFF=2.
 StdFdcSelect
         lda     PhysDrive
         anda    #$03
@@ -478,7 +412,50 @@ StdFdcSelect
         sta     STDFDC_SECTOR
         rts
 
-* Program DMA channel 1 for one 256-byte transfer to/from private PhysBuf.
+StdFdcWaitType1
+        ldx     #$FFFF
+SftWait
+        lda     STDFDC_STATUS
+        bita    #FDC_ST_BUSY
+        beq     SftDone
+        leax    -1,x
+        cmpx    #0
+        bne     SftWait
+        bra     SftFail
+SftDone
+        bita    #FDC_SEEKERR
+        bne     SftFail
+        lda     STDFDC_IRQ
+        andcc   #$FE
+        rts
+SftFail
+        lda     STDFDC_IRQ
+        orcc    #$01
+        rts
+
+StdFdcPrepareSystemTrack
+        clr     STDFDC_DRIVE
+        clr     STDFDC_SIDE
+        lda     STDFDC_IRQ
+        lda     #FDC_CMD_RESTORE
+        sta     STDFDC_STATUS
+        lbsr    StdFdcWaitType1
+        bcs     SfpFail
+        lda     #SYSTEM_TRACK
+        sta     STDFDC_DATA
+        lda     #FDC_CMD_SEEK
+        sta     STDFDC_STATUS
+        lbsr    StdFdcWaitType1
+        bcs     SfpFail
+        lda     STDFDC_TRACK
+        cmpa    #SYSTEM_TRACK
+        bne     SfpFail
+        andcc   #$FE
+        rts
+SfpFail
+        orcc    #$01
+        rts
+
 StdDmaSetupPrivate
         clr     DMA1_MODE
         ldx     #PhysBuf
@@ -488,12 +465,10 @@ StdDmaSetupPrivate
         stb     DMA1_ADDR_L
         lda     #$01
         sta     DMA1_BANK
-        lda     #$01
         sta     DMA1_COUNT_H
         clr     DMA1_COUNT_L
         rts
 
-* Start/complete one Standard-FDC sector read through DMA channel 1.
 StdFdcReadSector
         lbsr    StdFdcSelect
         lda     STDFDC_IRQ
@@ -502,7 +477,6 @@ StdFdcReadSector
         sta     DMA1_MODE
         lda     #FDC_CMD_READSEC
         sta     STDFDC_STATUS
-
         ldx     #$FFFF
 SfrWait
         lda     DMA1_MODE
@@ -517,7 +491,6 @@ SfrWait
         cmpx    #0
         bne     SfrWait
         bra     SfrFail
-
 SfrDone
         clr     DMA1_MODE
         lda     STDFDC_STATUS
@@ -533,7 +506,6 @@ SfrFailAck
         orcc    #$01
         rts
 
-* DMA private PhysBuf as one physical sector to the Standard FDC.
 StdFdcWriteSector
         lbsr    StdFdcSelect
         lda     STDFDC_IRQ
@@ -542,7 +514,6 @@ StdFdcWriteSector
         sta     DMA1_MODE
         lda     #FDC_CMD_WRITESEC
         sta     STDFDC_STATUS
-
         ldx     #$FFFF
 SfwWait
         lda     DMA1_MODE
@@ -557,7 +528,6 @@ SfwWait
         cmpx    #0
         bne     SfwWait
         bra     SfwFail
-
 SfwDone
         clr     DMA1_MODE
         lda     STDFDC_STATUS
@@ -573,12 +543,52 @@ SfwFailAck
         orcc    #$01
         rts
 
-* Advance within cylinder 1, whose 2D system image starts at H0/S1.
+* Copy a 256-byte Standard-FDC sector from PhysBuf to WBootDest using the
+* existing MMR window copy path.  This avoids consuming another DMA setup path.
+StdFdcReadWBoot
+        lbsr    StdFdcReadSector
+        bcs     SrwFail
+        ldd     WBootDest
+        std     MBOX_DMA_H
+        clr     PhysHalf
+        lbsr    CopyReadHalfToDma
+        bcs     SrwFail
+        ldd     WBootDest
+        addd    #128
+        std     MBOX_DMA_H
+        lda     #1
+        sta     PhysHalf
+        lbsr    CopyReadHalfToDma
+SrwFail
+        rts
+
+PrepareBootSystemTrack
+        lda     BOOTTYPE
+        bne     Pbst2HD
+        lbra    MiniFdcPrepareSystemTrack
+Pbst2HD
+        lbra    StdFdcPrepareSystemTrack
+
+BootReadWBoot
+        lda     PhysIs2HD
+        bne     Brw2HD
+        lbra    MiniFdcReadWBoot
+Brw2HD
+        lbra    StdFdcReadWBoot
+
 AdvanceSystemSector
         inc     PhysSector
+        lda     PhysIs2HD
+        beq     Ass2D
+        lda     PhysSector
+        cmpa    #27
+        blo     AssDone
+        bra     AssWrap
+Ass2D
         lda     PhysSector
         cmpa    #17
         blo     AssDone
+AssWrap
         lda     #1
         sta     PhysSector
         lda     #1
@@ -586,14 +596,12 @@ AdvanceSystemSector
 AssDone
         rts
 
-* Cold boot loads the one on-disk system62 image from cylinder 1.  It reads
-* all 26 physical sectors: CCP+BDOS ($1600) followed by BIOS ($0400).
-ColdBootLoadSystem
-        lbsr    MiniFdcPrepareSystemTrack
-        bcs     CblFail
+InitBootSystemRead
         clr     MBOX_DRIVE
         clr     PhysDrive
-        clr     PhysIs2HD
+        lda     BOOTTYPE
+        anda    #$01
+        sta     PhysIs2HD
         lda     #SYSTEM_TRACK
         sta     PhysTrack
         clr     PhysSide
@@ -601,10 +609,15 @@ ColdBootLoadSystem
         sta     PhysSector
         ldx     #CPM_SYSTEM_DEST
         stx     WBootDest
-        ldu     #CPM_SYSTEM_SECTORS
+        rts
 
+ColdBootLoadSystem
+        lbsr    PrepareBootSystemTrack
+        bcs     CblFail
+        lbsr    InitBootSystemRead
+        ldu     #CPM_SYSTEM_SECTORS
 CblSector
-        lbsr    MiniFdcReadWBoot
+        lbsr    BootReadWBoot
         bcs     CblFail
         ldx     WBootDest
         leax    256,x
@@ -621,27 +634,13 @@ CblFail
         orcc    #$01
         rts
 
-* Warm boot uses the same cylinder-1 system image but reloads only CCP+BDOS.
-* BIOS remains resident while the service call is in progress.  The current
-* implementation has only the 2D boot path, so the system image is still read
-* through Mini FDC drive 0; 2HD boot will supply the corresponding loader.
 WarmBootReload
-        lbsr    MiniFdcPrepareSystemTrack
+        lbsr    PrepareBootSystemTrack
         bcs     WbrFail
-        clr     MBOX_DRIVE
-        clr     PhysDrive
-        clr     PhysIs2HD
-        lda     #SYSTEM_TRACK
-        sta     PhysTrack
-        clr     PhysSide
-        lda     #1
-        sta     PhysSector
-        ldx     #CPM_SYSTEM_DEST
-        stx     WBootDest
+        lbsr    InitBootSystemRead
         ldu     #CPM_WBOOT_SECTORS
-
 WbrSector
-        lbsr    MiniFdcReadWBoot
+        lbsr    BootReadWBoot
         bcs     WbrFail
         ldx     WBootDest
         leax    256,x
@@ -658,9 +657,6 @@ WbrFail
         orcc    #$01
         rts
 
-* Map the physical Z80 bank-0 page containing MBOX_DMA into logical page D.
-* Returns Y = $D000 + the original 12-bit DMA offset.  The original MMR13
-* value is saved so callers can restore the exact pre-call mapping.
 MapZ80DmaWindow
         lda     MMR_PAGE_D
         sta     SavedMmrD
@@ -682,16 +678,10 @@ RestoreZ80Window
         sta     MMR_PAGE_D
         rts
 
-* Copy the requested 128-byte half of private PhysBuf to the CP/M DMA
-* address.  MMR13 is a temporary window onto Z80 physical bank-0 RAM, so the
-* copy remains correct even when the DMA buffer lies in BDOS or other pages
-* not visible at the same logical address to the 6809.  A 4 KiB crossing is
-* handled by advancing MMR13 and restarting the D-window at $D000.
 CopyReadHalfToDma
         lbsr    ValidateDmaRange
         bcs     CrhBad
         lbsr    MapZ80DmaWindow
-
         ldx     #PhysBuf
         lda     PhysHalf
         beq     CrhSourceReady
@@ -716,13 +706,10 @@ CrhBad
         orcc    #$01
         rts
 
-* Copy 128 bytes from the CP/M DMA address into the selected half of private
-* PhysBuf using the same temporary physical-memory window.
 CopyDmaToWriteHalf
         lbsr    ValidateDmaRange
         bcs     CwhBad
         lbsr    MapZ80DmaWindow
-
         ldx     #PhysBuf
         lda     PhysHalf
         beq     CwhDestReady
@@ -747,9 +734,6 @@ CwhBad
         orcc    #$01
         rts
 
-* Runtime copy placed at fixed CPU-card SRAM $FE00.  The CPUCTL write stops
-* the 6809.  When the Z80 later writes CPUCTL=0, the 6809 resumes at the NOP
-* and enters the private resident dispatcher through logical $E000.
 TrampolineTemplate
         lda     #$01
         sta     >CPUCTL

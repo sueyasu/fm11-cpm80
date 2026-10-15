@@ -111,8 +111,8 @@ init_mmr            sta       ,x+
                     ora       #FM11_MMR_ENABLE
                     sta       >FM11_MMR_CTRL
 
-* The I/O server now owns the remaining cold-boot sequence, including the
-* first seek to cylinder 1 and the system62.bin load.
+* A identifies the controller family used for boot to the common I/O server.
+                    clra
                     jmp       IOSERVER_BASE
 
 * DMA one 256-byte physical sector directly to DMA-bank:X and advance X.
