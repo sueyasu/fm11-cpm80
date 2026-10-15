@@ -3,6 +3,8 @@
 * The mailbox is in RAM shared with the Z80 while bank 0 is active.
 
 CPUCTL          equ     $FD05
+FM11_ROMCTL     equ     $FD93
+FM11_ROM_RAM    equ     $01
 
 MBOX_BASE       equ     $EC00
 MBOX_CMD        equ     MBOX_BASE+0
