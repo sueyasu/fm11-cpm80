@@ -91,18 +91,21 @@ ServiceBad
 
 ServiceRead
         lbsr    ValidateDiskRequest
-        bcs     ServiceBad
+        lbcs    ServiceBad
         lbsr    DecodeLogicalSector
-        bcs     ServiceBad
+        lbcs    ServiceBad
 
         lda     MBOX_DRIVE
         cmpa    #4
-        bhs     ServiceBad
-
+        bhs     ServiceRead2HD
         lbsr    MiniFdcReadSector
-        bcs     ServiceBad
+        bra     ServiceReadCopy
+ServiceRead2HD
+        lbsr    StdFdcReadSector
+ServiceReadCopy
+        lbcs    ServiceBad
         lbsr    CopyReadHalfToDma
-        bcs     ServiceBad
+        lbcs    ServiceBad
 
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
@@ -110,22 +113,29 @@ ServiceRead
 
 ServiceWrite
         lbsr    ValidateDiskRequest
-        bcs     ServiceBad
+        lbcs    ServiceBad
         lbsr    DecodeLogicalSector
-        bcs     ServiceBad
+        lbcs    ServiceBad
 
-* A:-D: use 256-byte physical sectors while CP/M writes 128-byte records.
-* Preserve the neighbouring record with a DMA read/modify/DMA write cycle.
+* All floppy formats use 256-byte physical sectors while CP/M writes 128-byte
+* records. Preserve the neighbouring record with a read/modify/write cycle.
         lda     MBOX_DRIVE
         cmpa    #4
-        bhs     ServiceBad
-
+        bhs     ServiceWrite2HD
         lbsr    MiniFdcReadSector
-        bcs     ServiceBad
+        lbcs    ServiceBad
         lbsr    CopyDmaToWriteHalf
-        bcs     ServiceBad
+        lbcs    ServiceBad
         lbsr    MiniFdcWriteSector
-        bcs     ServiceBad
+        bra     ServiceWriteDone
+ServiceWrite2HD
+        lbsr    StdFdcReadSector
+        lbcs    ServiceBad
+        lbsr    CopyDmaToWriteHalf
+        lbcs    ServiceBad
+        lbsr    StdFdcWriteSector
+ServiceWriteDone
+        lbcs    ServiceBad
 
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
@@ -133,7 +143,7 @@ ServiceWrite
 
 ServiceWBoot
         lbsr    WarmBootReload
-        bcs     ServiceBad
+        lbcs    ServiceBad
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
@@ -415,6 +425,118 @@ MfwFail
         clr     DMA0_MODE
 MfwFailAck
         lda     MINIFDC_IRQ
+        orcc    #$01
+        rts
+
+* Select one of the four 2HD drives on the Standard FDC.  CP/M E:-H: map to
+* controller drive numbers 0-3.  Track 0's special boot format is never used
+* by normal CP/M I/O because the 2HD DPB has OFF=2.
+StdFdcSelect
+        lda     MBOX_DRIVE
+        suba    #4
+        anda    #$03
+        sta     STDFDC_DRIVE
+        lda     PhysSide
+        anda    #$01
+        sta     STDFDC_SIDE
+        lda     PhysTrack
+        sta     STDFDC_TRACK
+        lda     PhysSector
+        sta     STDFDC_SECTOR
+        rts
+
+* Program DMA channel 1 for one 256-byte transfer to/from private PhysBuf.
+StdDmaSetupPrivate
+        clr     DMA1_MODE
+        ldx     #PhysBuf
+        tfr     x,d
+        addd    #IOSERVER_PHYS_DELTA
+        sta     DMA1_ADDR_H
+        stb     DMA1_ADDR_L
+        lda     #$01
+        sta     DMA1_BANK
+        lda     #$01
+        sta     DMA1_COUNT_H
+        clr     DMA1_COUNT_L
+        rts
+
+* Start/complete one Standard-FDC sector read through DMA channel 1.
+StdFdcReadSector
+        lbsr    StdFdcSelect
+        lda     STDFDC_IRQ
+        lbsr    StdDmaSetupPrivate
+        lda     #DMA_READ_MODE
+        sta     DMA1_MODE
+        lda     #FDC_CMD_READSEC
+        sta     STDFDC_STATUS
+
+        ldx     #$FFFF
+SfrWait
+        lda     DMA1_MODE
+        bita    #DMA_ERROR
+        bne     SfrFail
+        bita    #DMA_COMPLETE
+        bne     SfrDone
+        lda     STDFDC_STATUS
+        bita    #FDC_READERR
+        bne     SfrFail
+        leax    -1,x
+        cmpx    #0
+        bne     SfrWait
+        bra     SfrFail
+
+SfrDone
+        clr     DMA1_MODE
+        lda     STDFDC_STATUS
+        bita    #FDC_READERR
+        bne     SfrFailAck
+        lda     STDFDC_IRQ
+        andcc   #$FE
+        rts
+SfrFail
+        clr     DMA1_MODE
+SfrFailAck
+        lda     STDFDC_IRQ
+        orcc    #$01
+        rts
+
+* DMA private PhysBuf as one physical sector to the Standard FDC.
+StdFdcWriteSector
+        lbsr    StdFdcSelect
+        lda     STDFDC_IRQ
+        lbsr    StdDmaSetupPrivate
+        lda     #DMA_WRITE_MODE
+        sta     DMA1_MODE
+        lda     #FDC_CMD_WRITESEC
+        sta     STDFDC_STATUS
+
+        ldx     #$FFFF
+SfwWait
+        lda     DMA1_MODE
+        bita    #DMA_ERROR
+        bne     SfwFail
+        bita    #DMA_COMPLETE
+        bne     SfwDone
+        lda     STDFDC_STATUS
+        bita    #FDC_WRITEERR
+        bne     SfwFail
+        leax    -1,x
+        cmpx    #0
+        bne     SfwWait
+        bra     SfwFail
+
+SfwDone
+        clr     DMA1_MODE
+        lda     STDFDC_STATUS
+        bita    #FDC_WRITEERR
+        bne     SfwFailAck
+        lda     STDFDC_IRQ
+        andcc   #$FE
+        rts
+SfwFail
+        clr     DMA1_MODE
+SfwFailAck
+        lda     STDFDC_IRQ
         orcc    #$01
         rts
 

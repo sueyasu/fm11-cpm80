@@ -68,8 +68,9 @@ make
 ```
 
 The default build creates both the bootable 2D system disk and a formatted
-non-bootable 2HD data disk. The latter is prepared for the current 2HD DPB but
-2HD boot and Standard-FDC runtime I/O are not implemented yet.
+non-bootable 2HD data disk. The 2HD image uses the E:-H: DPB and can be read
+and written through the FM-11 Standard FDC at runtime; only 2HD boot remains
+unsupported.
 
 Useful individual targets:
 

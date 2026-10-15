@@ -76,6 +76,25 @@ DMA0_COUNT_L    equ     $FD43
 DMA0_MODE       equ     $FD50
 DMA0_BANK       equ     $FD94
 
+* Standard FDC, used by the 2HD drives E:-H:.
+STDFDC          equ     $FD30
+STDFDC_STATUS   equ     STDFDC+0       * read status / write command
+STDFDC_TRACK    equ     STDFDC+1
+STDFDC_SECTOR   equ     STDFDC+2
+STDFDC_DATA     equ     STDFDC+3
+STDFDC_SIDE     equ     STDFDC+4       * bit 0 = side
+STDFDC_DRIVE    equ     STDFDC+5       * bits 0-1 = drive
+STDFDC_AUX      equ     STDFDC+6
+STDFDC_IRQ      equ     STDFDC+7       * read acknowledges FDC IRQ
+
+* DMA channel 1 serves the Standard FDC.
+DMA1_ADDR_H     equ     $FD44
+DMA1_ADDR_L     equ     $FD45
+DMA1_COUNT_H    equ     $FD46
+DMA1_COUNT_L    equ     $FD47
+DMA1_MODE       equ     $FD51
+DMA1_BANK       equ     $FD95
+
 DMA_DIR_READ    equ     $00            * I/O -> memory
 DMA_DIR_WRITE   equ     $01            * memory -> I/O
 DMA_ENABLE      equ     $04
@@ -83,6 +102,3 @@ DMA_ERROR       equ     $40
 DMA_COMPLETE    equ     $80
 DMA_READ_MODE   equ     DMA_DIR_READ+DMA_ENABLE
 DMA_WRITE_MODE  equ     DMA_DIR_WRITE+DMA_ENABLE
-
-* Standard FDC, reserved for the 2HD drives E:-H: (not implemented yet).
-STDFDC          equ     $FD30

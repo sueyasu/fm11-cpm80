@@ -15,8 +15,8 @@ build/images/fm11-cpm80-2hd.raw
 ```
 
 The 2D image is the current bootable system disk. The 2HD image is a formatted
-non-bootable data disk prepared for the existing 2HD DPB; 2HD boot and runtime
-Standard-FDC read/write support are intentionally not part of this stage.
+non-bootable data disk prepared for the existing 2HD DPB and is accessible at
+runtime through the Standard FDC as E:-H:. 2HD boot remains unsupported.
 
 ## 2D geometry
 
@@ -99,6 +99,13 @@ current 2HD image is deliberately non-bootable, so that area is zero-filled:
 06800-077FF  CP/M directory (allocation block 0)
 07800-       file data (allocation block 1 onward)
 ```
+
+At runtime CP/M maps E:-H: to Standard-FDC drives 0-3. The Standard FDC uses
+DMA channel 1. Each physical sector is 256 bytes while CP/M records are 128
+bytes, so reads select the requested half of a private 256-byte buffer and
+writes use a read/modify/write cycle to preserve the neighbouring record.
+Because `OFF=2`, normal CP/M file I/O starts at cylinder 2 and does not touch
+the special boot-track formats used by some FM-11 2HD media.
 
 The 2HD DPB is:
 
