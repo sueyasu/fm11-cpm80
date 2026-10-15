@@ -61,6 +61,9 @@ ALV7:           equ     ALV6+31
 
 boot:
         xor     a
+        ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
+        ld      (0003h),a       ; IOBYTE
+        ld      (0004h),a       ; current disk = A:
         ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl

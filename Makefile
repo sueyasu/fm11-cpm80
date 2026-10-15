@@ -38,7 +38,7 @@ $(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm include/6809/fm11.inc | $(M6809_
 
 loader: $(M6809_BUILD)/loader.bin
 
-$(M6809_BUILD)/loader.bin: m6809/loader.asm include/6809/fm11.inc | $(M6809_BUILD)
+$(M6809_BUILD)/loader.bin: m6809/loader.asm include/6809/fm11.inc $(CPM_BUILD)/system56.bin $(M6809_BUILD)/ioserver.bin | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/loader.lst --symbols -o $@ $<
 
 extract-core: $(FUJITSU_CPM_IMAGE) tools/extract_fujitsu_core.py
