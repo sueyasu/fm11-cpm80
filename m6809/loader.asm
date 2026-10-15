@@ -16,11 +16,10 @@ LoaderEntry
 *        CCP  = Z80 $C400
 *        BDOS = Z80 $CC00
 *        BIOS = Z80 $DA00
-*   3. load/retain the resident 6809 I/O service at $DE00-$EFFF
-*   4. leave $F000-$F247 available for CP/M DIRBUF/CSV/ALV workspace
-*   5. clear the mailbox at $EC00
-*   6. initialize Mini FDC and Standard FDC to a known state
-*   7. jump to IoServerStart; it performs the first FD05 hand-off to Z80
+*   3. load/retain the resident 6809 I/O service at $DE00-$EBFF
+*   4. preserve the mailbox at $EC00 and CP/M workspace at $F000-$F247
+*   5. initialize Mini FDC and Standard FDC to a known state
+*   6. jump to IoServerStart; it performs the first FD05 hand-off to Z80
 
         clr     MBOX_CMD
         clr     MBOX_STATUS
