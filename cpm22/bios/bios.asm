@@ -163,9 +163,14 @@ serial_init:
         ld      (FM11_SER_STAT),a
         ret
 
+; CP/M requires CONST to return 00h if no character is ready and FFh if one
+; is ready.  Do not return the raw 8251 RxRDY bit (02h): BDOS masks bit 0
+; while polling for console break/status input.
 const:
         ld      a,(FM11_SER_STAT)
         and     I8251_RXRDY
+        ret     z
+        ld      a,0FFh
         ret
 
 conin:
