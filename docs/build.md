@@ -20,7 +20,7 @@ Z80, assembler.
 ## External CCP + BDOS
 
 The initial port is a Fujitsu-style **56K CP/M 2.2** system, not a 62K system.
-Provide this local file:
+The build expects:
 
 ```text
 external/cpm22/ccpbdos56.bin
@@ -35,6 +35,25 @@ DA00-      BIOS built from cpm22/bios/bios.asm
 ```
 
 The build rejects a binary of any other size.
+
+### Extracting it from the Fujitsu 2D image
+
+The supplied Fujitsu CP/M image already contains the correct 56K CCP+BDOS.
+Keep that original image outside Git at:
+
+```text
+external/reference/cpm2d00.img
+```
+
+Then run:
+
+```sh
+make extract-core
+```
+
+The extractor copies image offsets `0200h-17FFh` to
+`external/cpm22/ccpbdos56.bin`. Neither the original image nor the extracted
+binary is tracked by Git.
 
 A conventional 62K CP/M layout would put CCP near `DC00`, BDOS near `E400`,
 and BIOS near `F200`. On the FM-11 port that would overlap the resident 6809
@@ -59,7 +78,16 @@ mailbox at `EC00`. The BIOS points its mutable disk workspace directly at the
 
 ## Build
 
+If the external CCP+BDOS has already been prepared:
+
 ```sh
+make
+```
+
+Starting from the Fujitsu reference image:
+
+```sh
+make extract-core
 make
 ```
 
@@ -70,6 +98,7 @@ make check-tools
 make bios
 make ioserver
 make loader
+make extract-core
 make system
 make clean
 ```
