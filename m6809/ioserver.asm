@@ -86,7 +86,7 @@ ServiceLoop
         cmpb    #MBCMD_WRITE
         beq     ServiceWrite
         cmpb    #MBCMD_WBOOT
-        beq     ServiceWBoot
+        lbeq    ServiceWBoot
 
 ServiceBad
         lda     #MBSTAT_ERROR
