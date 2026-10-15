@@ -1,12 +1,12 @@
-; FM-11 CP/M 2.2 BIOS skeleton
+; FM-11 CP/M 2.2 BIOS
 ;
-; Target memory layout follows the Fujitsu 56K system:
+; 56K system layout compatible with the Fujitsu memory arrangement:
 ;   CCP  = C400h
 ;   BDOS = CC00h
 ;   BIOS = DA00h
+;   6809 resident service starts at DE00h
 ;
-; Syntax is intentionally kept to conventional Intel/Z80 notation.  The
-; exact assembler/toolchain will be fixed once the first build is wired up.
+; Intel 8080 syntax for asm8080.
 
         include "../../include/z80/fm11.inc"
 
@@ -14,97 +14,118 @@ CCPBASE         equ     0C400h
 BDOSENT         equ     0CC06h
 BIOSBASE        equ     0DA00h
 
+; CP/M mutable disk workspace lives in RAM shared with the 6809 service,
+; but outside the service's DE00-EFFF code reservation.  These addresses
+; do not emit bytes into the BIOS image.
+DIRBUF          equ     0F000h
+CSV0            equ     0F080h
+CSV1            equ     CSV0+32
+CSV2            equ     CSV1+32
+CSV3            equ     CSV2+32
+CSV4            equ     CSV3+32
+CSV5            equ     CSV4+32
+CSV6            equ     CSV5+32
+CSV7            equ     CSV6+32
+ALV0            equ     0F180h
+ALV1            equ     ALV0+19
+ALV2            equ     ALV1+19
+ALV3            equ     ALV2+19
+ALV4            equ     ALV3+19
+ALV5            equ     ALV4+31
+ALV6            equ     ALV5+31
+ALV7            equ     ALV6+31
+
         org     BIOSBASE
 
-        jp      boot
-        jp      wboot
-        jp      const
-        jp      conin
-        jp      conout
-        jp      list
-        jp      punch
-        jp      reader
-        jp      home
-        jp      seldsk
-        jp      settrk
-        jp      setsec
-        jp      setdma
-        jp      read
-        jp      write
-        jp      listst
-        jp      sectran
+        jmp     boot
+        jmp     wboot
+        jmp     const
+        jmp     conin
+        jmp     conout
+        jmp     list
+        jmp     punch
+        jmp     reader
+        jmp     home
+        jmp     seldsk
+        jmp     settrk
+        jmp     setsec
+        jmp     setdma
+        jmp     read
+        jmp     write
+        jmp     listst
+        jmp     sectran
 
 ; ----------------------------------------------------------------------
 ; BOOT / WBOOT
 ; ----------------------------------------------------------------------
 
 boot:
-        xor     a
-        ld      (curdrv),a
-        ld      hl,0080h
-        ld      (curdma),hl
+        xra     a
+        sta     curdrv
+        lxi     h,0080h
+        shld    curdma
         call    setvec
-        jp      CCPBASE
+        jmp     CCPBASE
 
 wboot:
-        ld      a,MBCMD_WBOOT
+        mvi     a,MBCMD_WBOOT
         call    mbox_simple
-        or      a
-        jr      nz,wboot       ; low-level warm boot is not implemented yet
+        ora     a
+        jnz     wboot           ; warm boot loader not implemented yet
         call    setvec
-        jp      CCPBASE
+        jmp     CCPBASE
 
 setvec:
-        ld      a,0C3h         ; JP opcode
-        ld      (0000h),a
-        ld      hl,wboot
-        ld      (0001h),hl
-        ld      (0005h),a
-        ld      hl,BDOSENT
-        ld      (0006h),hl
+        mvi     a,0C3h          ; JMP opcode
+        sta     0000h
+        lxi     h,wboot
+        shld    0001h
+        sta     0005h
+        lxi     h,BDOSENT
+        shld    0006h
         ret
 
 ; ----------------------------------------------------------------------
 ; Console: direct access to the Z80-visible standard 8251.
-; The 6809 loader/firmware must initialize the serial interface first.
+; The 6809 loader/firmware initializes its mode/clock environment first.
 ; ----------------------------------------------------------------------
 
 const:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_RXRDY
-        ret                     ; 0=no char, nonzero=ready
+        lda     FM11_SER_STAT
+        ani     I8251_RXRDY
+        ret
 
 conin:
 .conin_wait:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_RXRDY
-        jr      z,.conin_wait
-        ld      a,(FM11_SER_DATA)
-        and     07Fh
+        lda     FM11_SER_STAT
+        ani     I8251_RXRDY
+        jz      .conin_wait
+        lda     FM11_SER_DATA
+        ani     07Fh
         ret
 
 conout:
-        push    af
+        push    psw
 .conout_wait:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_TXRDY
-        jr      z,.conout_wait
-        pop     af
-        ld      a,c
-        ld      (FM11_SER_DATA),a
+        lda     FM11_SER_STAT
+        ani     I8251_TXRDY
+        jz      .conout_wait
+        pop     psw
+        mov     a,c
+        sta     FM11_SER_DATA
         ret
 
 list:
-        jp      conout
+        jmp     conout
 
 punch:
-        jp      conout
+        jmp     conout
 
 reader:
-        jp      conin
+        jmp     conin
 
 listst:
-        ld      a,0FFh
+        mvi     a,0FFh
         ret
 
 ; ----------------------------------------------------------------------
@@ -112,56 +133,62 @@ listst:
 ; ----------------------------------------------------------------------
 
 home:
-        ld      bc,0
-        jp      settrk
+        lxi     b,0
+        jmp     settrk
 
 ; C = CP/M drive number.  A:-D: are 2D, E:-H: are 2HD.
 ; Returns HL=DPH or HL=0 if unsupported.
 seldsk:
-        ld      a,c
-        cp      8
-        jr      nc,.bad_drive
-        ld      (curdrv),a
-        ld      l,a
-        ld      h,0
-        add     hl,hl           ; word table
-        ld      de,dphtab
-        add     hl,de
-        ld      e,(hl)
-        inc     hl
-        ld      d,(hl)
-        ex      de,hl
+        mov     a,c
+        cpi     8
+        jnc     .bad_drive
+        sta     curdrv
+        mov     l,a
+        mvi     h,0
+        dad     h               ; word table
+        lxi     d,dphtab
+        dad     d
+        mov     e,m
+        inx     h
+        mov     d,m
+        xchg
         ret
 .bad_drive:
-        ld      hl,0
+        lxi     h,0
         ret
 
 settrk:
-        ld      (curtrk),bc
+        mov     h,b
+        mov     l,c
+        shld    curtrk
         ret
 
 setsec:
-        ld      (cursec),bc
+        mov     h,b
+        mov     l,c
+        shld    cursec
         ret
 
 setdma:
-        ld      (curdma),bc
+        mov     h,b
+        mov     l,c
+        shld    curdma
         ret
 
 read:
-        ld      a,MBCMD_READ
-        jp      disk_call
+        mvi     a,MBCMD_READ
+        jmp     disk_call
 
 write:
-        ld      a,c
-        ld      (MBOX_FLAGS),a  ; CP/M write type for future optimisation
-        ld      a,MBCMD_WRITE
-        jp      disk_call
+        mov     a,c
+        sta     MBOX_FLAGS      ; CP/M write type for future optimisation
+        mvi     a,MBCMD_WRITE
+        jmp     disk_call
 
-; HL=logical sector, DE=translation table.  No skew table initially.
+; BC = logical sector, DE = translation table.  No skew table initially.
 sectran:
-        ex      de,hl           ; preserve DE conventionally
-        ex      de,hl
+        mov     h,b
+        mov     l,c
         ret
 
 ; ----------------------------------------------------------------------
@@ -169,50 +196,50 @@ sectran:
 ; ----------------------------------------------------------------------
 
 disk_call:
-        ld      (MBOX_CMD),a
-        xor     a
-        ld      (MBOX_STATUS),a
+        sta     MBOX_CMD
+        xra     a
+        sta     MBOX_STATUS
 
-        ld      a,(curdrv)
-        ld      (MBOX_DRIVE),a
+        lda     curdrv
+        sta     MBOX_DRIVE
 
-        ld      hl,(curtrk)
-        ld      a,h
-        ld      (MBOX_TRACK_H),a
-        ld      a,l
-        ld      (MBOX_TRACK_L),a
+        lhld    curtrk
+        mov     a,h
+        sta     MBOX_TRACK_H
+        mov     a,l
+        sta     MBOX_TRACK_L
 
-        ld      hl,(cursec)
-        ld      a,h
-        ld      (MBOX_SECTOR_H),a
-        ld      a,l
-        ld      (MBOX_SECTOR_L),a
+        lhld    cursec
+        mov     a,h
+        sta     MBOX_SECTOR_H
+        mov     a,l
+        sta     MBOX_SECTOR_L
 
-        ld      hl,(curdma)
-        ld      a,h
-        ld      (MBOX_DMA_H),a
-        ld      a,l
-        ld      (MBOX_DMA_L),a
+        lhld    curdma
+        mov     a,h
+        sta     MBOX_DMA_H
+        mov     a,l
+        sta     MBOX_DMA_L
 
         di
-        xor     a
-        ld      (FM11_CPUCTL),a ; stop Z80, resume 6809
-        nop                     ; execution resumes here
+        xra     a
+        sta     FM11_CPUCTL     ; stop Z80, resume 6809
+        nop                     ; Z80 resumes here
         ei
-        ld      a,(MBOX_STATUS)
-        or      a
+        lda     MBOX_STATUS
+        ora     a
         ret
 
 mbox_simple:
-        ld      (MBOX_CMD),a
-        xor     a
-        ld      (MBOX_STATUS),a
+        sta     MBOX_CMD
+        xra     a
+        sta     MBOX_STATUS
         di
-        ld      (FM11_CPUCTL),a
+        sta     FM11_CPUCTL
         nop
         ei
-        ld      a,(MBOX_STATUS)
-        or      a
+        lda     MBOX_STATUS
+        ora     a
         ret
 
 ; ----------------------------------------------------------------------
@@ -220,23 +247,23 @@ mbox_simple:
 ; ----------------------------------------------------------------------
 
 ; DPH: XLT, 3 scratch words, DIRBUF, DPB, CSV, ALV
-DPH macro dpb,csv,alv
-        dw      0
-        dw      0,0,0
-        dw      dirbuf
-        dw      dpb
-        dw      csv
-        dw      alv
-        endm
 
-dph0:   DPH     dpb2d,csv0,alv0
-dph1:   DPH     dpb2d,csv1,alv1
-dph2:   DPH     dpb2d,csv2,alv2
-dph3:   DPH     dpb2d,csv3,alv3
-dph4:   DPH     dpb2hd,csv4,alv4
-dph5:   DPH     dpb2hd,csv5,alv5
-dph6:   DPH     dpb2hd,csv6,alv6
-dph7:   DPH     dpb2hd,csv7,alv7
+dph0:
+        dw      0,0,0,0,DIRBUF,dpb2d,CSV0,ALV0
+dph1:
+        dw      0,0,0,0,DIRBUF,dpb2d,CSV1,ALV1
+dph2:
+        dw      0,0,0,0,DIRBUF,dpb2d,CSV2,ALV2
+dph3:
+        dw      0,0,0,0,DIRBUF,dpb2d,CSV3,ALV3
+dph4:
+        dw      0,0,0,0,DIRBUF,dpb2hd,CSV4,ALV4
+dph5:
+        dw      0,0,0,0,DIRBUF,dpb2hd,CSV5,ALV5
+dph6:
+        dw      0,0,0,0,DIRBUF,dpb2hd,CSV6,ALV6
+dph7:
+        dw      0,0,0,0,DIRBUF,dpb2hd,CSV7,ALV7
 
 dphtab:
         dw      dph0,dph1,dph2,dph3
@@ -268,29 +295,13 @@ dpb2hd:
         dw      32              ; CKS
         dw      2               ; OFF
 
-curdrv: db      0
-curtrk: dw      0
-cursec: dw      0
-curdma: dw      0080h
+curdrv:
+        db      0
+curtrk:
+        dw      0
+cursec:
+        dw      0
+curdma:
+        dw      0080h
 
-dirbuf: ds      128
-
-; 32-byte check vectors per drive.
-csv0:   ds      32
-csv1:   ds      32
-csv2:   ds      32
-csv3:   ds      32
-csv4:   ds      32
-csv5:   ds      32
-csv6:   ds      32
-csv7:   ds      32
-
-; Allocation vectors: ceil((DSM+1)/8).
-alv0:   ds      19
-alv1:   ds      19
-alv2:   ds      19
-alv3:   ds      19
-alv4:   ds      31
-alv5:   ds      31
-alv6:   ds      31
-alv7:   ds      31
+        end
