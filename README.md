@@ -16,7 +16,7 @@ The implementation follows the FM-11 hardware architecture and Fujitsu disk form
 
 ## Current status
 
-The initial framework contains:
+The framework contains:
 
 - Z80 CP/M 2.2 BIOS jump table and basic state handling
 - direct standard-8251 console routines
@@ -25,9 +25,11 @@ The initial framework contains:
 - Z80/6809 mailbox definitions at `$EC00`
 - resident 6809 I/O-service dispatcher at `$DE00`
 - logical 128-byte to physical 256-byte sector geometry conversion
+- Mini FDC PIO sector READ for A:-D: (2D)
+- 256-byte bounce-buffer deblocking into the selected CP/M 128-byte DMA record
 - cold-loader skeleton
 
-Actual Mini FDC / Standard FDC sector transfer and the boot-track image builder are intentionally the next implementation stage.
+The current functional disk milestone is the A:-D: 2D READ path. WRITE, the Standard FDC E:-H: 2HD path, WBOOT system-track reload and the boot-image builder remain to be implemented and tested.
 
 ## Source layout
 
@@ -41,4 +43,4 @@ docs/              hardware, protocol and disk-format notes
 
 ## Reference media
 
-Original Fujitsu CP/M disk images are used only as reverse-engineering references and are not part of this repository.  CP/M system binaries whose redistribution terms are unclear should likewise be supplied externally by the user/build environment.
+Original Fujitsu CP/M disk images are used only as reverse-engineering references and are not part of this repository. CP/M system binaries whose redistribution terms are unclear should likewise be supplied externally by the user/build environment.

@@ -1,8 +1,8 @@
-* FM-11 resident 6809 I/O service skeleton.
+* FM-11 resident 6809 I/O service.
 *
-* This code is intended to remain resident while CP/M runs on the Z80.
-* It deliberately owns floppy-controller access; the Z80 BIOS communicates
-* only through the EC00 mailbox and CPU hand-off at FD05.
+* This code remains resident while CP/M runs on the Z80.  FDC access is
+* owned by the 6809; the Z80 BIOS communicates only through the EC00
+* mailbox and CPU hand-off at FD05.
 
         include "../include/6809/fm11.inc"
 
@@ -41,12 +41,18 @@ ServiceRead
         bsr     DecodeLogicalSector
         bcs     ServiceBad
 
-* TODO next commit:
-*   - select Mini FDC for A:-D: or Standard FDC for E:-H:
-*   - read one 256-byte physical sector into PhysBuf
-*   - copy the selected 128-byte half to the CP/M DMA address
-*   - retry and return controller errors appropriately
-        lda     #MBSTAT_ERROR
+* First functional target: A:-D: (2D / Mini FDC).  E:-H: explicitly fail
+* until the Standard FDC path is implemented.
+        lda     MBOX_DRIVE
+        cmpa    #4
+        bhs     ServiceBad
+
+        bsr     MiniFdcReadSector
+        bcs     ServiceBad
+        bsr     CopyReadHalfToDma
+        bcs     ServiceBad
+
+        lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
 
@@ -56,9 +62,8 @@ ServiceWrite
         bsr     DecodeLogicalSector
         bcs     ServiceBad
 
-* TODO next commit:
-*   - read-modify-write a 256-byte physical sector where required
-*   - honour MBOX_FLAGS CP/M write type once basic writes are proven
+* WRITE is deliberately not claimed yet.  It will use a 256-byte
+* read/modify/write so one CP/M 128-byte record cannot corrupt its neighbour.
         lda     #MBSTAT_ERROR
         sta     MBOX_STATUS
         bra     ServiceDone
@@ -78,8 +83,7 @@ ServiceDone
         bra     ServiceLoop
 
 * ----------------------------------------------------------------------
-* Validate drive 0..7 and basic logical-sector range.
-* Carry set on failure.
+* Validate drive 0..7.  Carry set on failure.
 * ----------------------------------------------------------------------
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -100,13 +104,13 @@ VdrBad
 *   MBOX_SECTOR_*  logical record within cylinder (big endian)
 *
 * Outputs:
-*   PhysTrack      cylinder low byte (40/77 cylinder media)
+*   PhysTrack      cylinder low byte
 *   PhysSide       0 or 1
 *   PhysSector     1-based physical sector number
 *   PhysHalf       0=first 128 bytes, 1=second 128 bytes
 *   PhysFdcBase    MINIFDC or STDFDC
 *
-* Carry set if the logical sector is outside the selected format.
+* Carry set if track/sector is outside the selected format.
 * ----------------------------------------------------------------------
 DecodeLogicalSector
         lda     MBOX_TRACK_H
@@ -122,7 +126,10 @@ DecodeLogicalSector
         cmpa    #4
         bhs     Dls2HD
 
-* 2D: 64 records/cylinder, 32 records/side, 16 x 256-byte sectors/side.
+* 2D: 40 cylinders, 64 records/cylinder, 32 records/side.
+        lda     PhysTrack
+        cmpa    #40
+        bhs     DlsBad
         cmpb    #64
         bhs     DlsBad
         ldx     #MINIFDC
@@ -135,7 +142,10 @@ DecodeLogicalSector
         bra     DlsHaveSide
 
 Dls2HD
-* 2HD: 104 records/cylinder, 52 records/side, 26 x 256-byte sectors/side.
+* 2HD: 77 cylinders, 104 records/cylinder, 52 records/side.
+        lda     PhysTrack
+        cmpa    #77
+        bhs     DlsBad
         cmpb    #104
         bhs     DlsBad
         ldx     #STDFDC
@@ -158,6 +168,91 @@ DlsHaveSide
 
 DlsBad
         orcc    #$01
+        rts
+
+* ----------------------------------------------------------------------
+* Read one 256-byte sector from the Mini FDC into PhysBuf.
+*
+* The FM-11 emulator exposes the next DRQ through a status read after each
+* data byte.  Poll DRQ explicitly and use a bounded timeout; do not treat a
+* transient BUSY=0 as completion while the 256-byte transfer is in progress.
+*
+* Carry clear = success, carry set = failure/timeout.
+* ----------------------------------------------------------------------
+MiniFdcReadSector
+* A:-D: map directly to Mini-FDC units 0..3.
+        lda     MBOX_DRIVE
+        anda    #$03
+        sta     MINIFDC_DRIVE
+
+* Program side, cylinder and 1-based physical sector.
+        lda     PhysSide
+        anda    #$01
+        sta     MINIFDC_SIDE
+        lda     PhysTrack
+        sta     MINIFDC_TRACK
+        lda     PhysSector
+        sta     MINIFDC_SECTOR
+
+* Acknowledge any stale completion request before starting a new command.
+        lda     MINIFDC_IRQ
+
+        lda     #FDC_CMD_READSEC
+        sta     MINIFDC_STATUS
+
+        ldy     #PhysBuf
+        clrb                    * 0 means 256 iterations with DECB/BNE
+
+MfrByte
+        ldx     #$FFFF          * bounded wait for one DRQ
+MfrWaitDrq
+        lda     MINIFDC_STATUS
+        bita    #FDC_READERR
+        bne     MfrFailAck
+        bita    #FDC_ST_DRQ
+        bne     MfrHaveByte
+        leax    -1,x
+        bne     MfrWaitDrq
+        bra     MfrFailAck      * timeout
+
+MfrHaveByte
+        lda     MINIFDC_DATA
+        sta     ,y+
+        decb
+        bne     MfrByte
+
+* Transfer finished.  Check final controller status and acknowledge IRQ.
+        lda     MINIFDC_STATUS
+        bita    #FDC_READERR
+        bne     MfrFailAck
+        lda     MINIFDC_IRQ
+        andcc   #$FE
+        rts
+
+MfrFailAck
+        lda     MINIFDC_IRQ
+        orcc    #$01
+        rts
+
+* ----------------------------------------------------------------------
+* Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
+* MBOX_DMA_H/L is big-endian so the 6809 can load it as a native pointer.
+* CP/M 2.2 runs in Z80 bank 0, so this is the same physical RAM address.
+* ----------------------------------------------------------------------
+CopyReadHalfToDma
+        ldx     #PhysBuf
+        lda     PhysHalf
+        beq     CrhSourceReady
+        leax    128,x
+CrhSourceReady
+        ldy     MBOX_DMA_H
+        ldb     #128
+CrhLoop
+        lda     ,x+
+        sta     ,y+
+        decb
+        bne     CrhLoop
+        andcc   #$FE
         rts
 
 PhysTrack       rmb     1
