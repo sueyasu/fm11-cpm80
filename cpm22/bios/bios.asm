@@ -83,10 +83,11 @@ boot:
 ; CP/M page zero byte 0004h is uuuudddd: high nibble = user number,
 ; low nibble = current drive.  CCP requires that complete byte in C on entry.
 ;
-; WBOOT may be entered from deep inside BDOS via JP 0000h.  The active BDOS
-; stack can therefore lie inside the CCP/BDOS image that is about to be
-; reloaded.  Move SP below the BIOS disk workspace before making any calls so
-; the reload cannot overwrite the live return stack.
+; WBOOT can be entered from inside BDOS via JP 0000h, leaving SP in memory
+; that is part of the CCP/BDOS image about to be reloaded.  Switch to a fixed
+; stack immediately below the BIOS disk workspace before making any calls.
+; F960h lies above the reload range (DC00h-F1FFh), while the downward-growing
+; stack remains below DIRBUF at F970h.
 ;
 ; A fatal BDOS disk error can leave 0004h naming the drive that failed.  Before
 ; restoring a non-A: drive after WBOOT, probe its first data track.  If the
