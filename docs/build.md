@@ -15,26 +15,24 @@ sudo apt install z80asm
 
 ## External CCP + BDOS
 
-The initial port is a Fujitsu-style **56K CP/M 2.2** system. The build expects:
+The active build is a **62K CP/M 2.2** system. It expects:
+
+```text
+external/cpm22/ccpbdos62.bin
+```
+
+The file must be exactly `$1600` (5632) bytes and represents CCP at `$DC00`
+followed by BDOS through `$F1FF`. The BIOS is assembled at `$F200`.
+
+The locally owned Fujitsu reference image can still be used to extract its
+original 56K CCP+BDOS for comparison. `make extract-core` writes that separate
+reference file to:
 
 ```text
 external/cpm22/ccpbdos56.bin
 ```
 
-It must be exactly `1600h` (5632) bytes and represents CCP at `$C400` followed
-by BDOS through `$D9FF`. The new BIOS is assembled at `$DA00`.
-
-To extract the 56K CCP+BDOS from the locally owned Fujitsu 2D image, place it at:
-
-```text
-external/reference/cpm2d00.img
-```
-
-then run:
-
-```sh
-make extract-core
-```
+It does not overwrite the active 62K core.
 
 ## External CP/M commands
 
@@ -47,17 +45,21 @@ external/commands/
 They are installed in user area 0 of the generated disk and are not tracked by
 Git.
 
-## Memory ownership above BDOS
+## Z80 memory layout
 
 ```text
-DA00-DDFF  Z80 CP/M BIOS (maximum 1 KiB)
-DE00-EBFF  resident 6809 I/O server (maximum 0E00h = 3584 bytes)
-EC00-EC09  Z80/6809 mailbox
-EC0A-EFFF  reserved for future shared service data
-F000-F247  CP/M DIRBUF / CSV / ALV workspace
-F248-FBFF  reserved/free shared RAM
-FC00-FFFF  Z80 I/O space
+0100-DBFF  CP/M TPA (55 KiB)
+DC00-E3FF  CCP
+E400-F1FF  BDOS
+F200-F5FF  BIOS slot (maximum 1 KiB)
+F600-F99F  free
+F9A0-FBE7  DIRBUF / CSV / ALV workspace
+FBF6-FBFF  Z80/6809 mailbox
+FC00-FFFF  memory-mapped I/O
 ```
+
+The 6809 I/O server is not stored in Z80 RAM. It is linked at logical `$E000`,
+loaded at physical `$10000`, and reached through MMR14 while the 6809 runs.
 
 ## Build
 
@@ -72,7 +74,6 @@ make check-tools
 make bios
 make ioserver
 make system
-make loader
 make ipl
 make image
 make extract-core
@@ -83,15 +84,13 @@ Outputs include:
 
 ```text
 build/z80/bios.bin
-build/6809/ioserver.bin
-build/6809/loader.bin
-build/6809/ipl_2d.bin
-build/cpm22/system56.bin
+build/m6809/ioserver.bin
+build/m6809/ipl_2d.bin
+build/cpm22/system62.bin
 build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2d.d88
 ```
 
-`ipl_2d.bin` is the 512-byte-maximum ROM-loaded stage 1 assembled for `$0400`.
-`loader.bin` is the position-independent stage 2. The generated D88 contains
-both stages and is intended to boot directly on the FM-11 2D boot path. See
+`ipl_2d.bin` is the 512-byte-maximum ROM-loaded IPL assembled for `$0400`.
+There is no second-stage loader in the active boot path. See
 `docs/coldboot.md` and `docs/disk-image.md` for the exact sector layout.

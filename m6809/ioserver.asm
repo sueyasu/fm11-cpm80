@@ -1,9 +1,10 @@
 * FM-11 resident 6809 I/O service.
 *
-* The service is linked at logical $DE00 but no longer resides in Z80 bank-0
-* RAM.  The IPL loads it at physical $10E00 and maps logical $D000-$EFFF to
-* physical $10000-$11FFF through MMR13/MMR14.  The Z80 therefore retains its
-* own independent RAM at $DE00-$EFFF.
+* The service is linked at logical $E000 but does not reside in Z80 bank-0
+* RAM.  The IPL loads it at physical $10000 and maps logical $E000-$EFFF to
+* physical $10000-$10FFF through MMR14.  Logical page D remains identity-
+* mapped so 62K CP/M can use TPA through $DBFF without special DMA-buffer
+* mapping.
 *
 * CPU hand-off is isolated in a small trampoline copied to the FM-11
 * CPU-card fixed SRAM at $FE00.  That SRAM remains visible independently
@@ -14,7 +15,7 @@
 
 TRAMPOLINE_BASE equ    $FE00
 
-        org     $DE00
+        org     $E000
 
 IoServerStart
         orcc    #$50            * mask IRQ/FIRQ while establishing service
@@ -186,8 +187,8 @@ MiniFdcSelect
         rts
 
 * Program DMA channel 0 for one 256-byte transfer to/from the private
-* I/O-server mapping.  X is a logical address in $D000-$EFFF; adding $3000
-* produces the low 16 bits of its physical $1xxxx address.
+* I/O-server mapping.  X is a logical address in $E000-$EFFF; adding $2000
+* wraps to the low 16 bits of its physical $1xxxx address.
 MiniDmaSetupPrivate
         clr     DMA0_MODE
         tfr     x,d
@@ -202,8 +203,8 @@ MiniDmaSetupPrivate
         rts
 
 * Program DMA channel 0 for a physical bank-0 transfer at X.  WBOOT uses
-* this path so CCP+BDOS can be reloaded into physical $C400-$D9FF even while
-* logical page D is mapped to the private 6809 service.
+* this path so CCP+BDOS can be reloaded into physical $DC00-$F1FF even while
+* logical page E is mapped to the private 6809 service.
 MiniDmaSetupBank0
         clr     DMA0_MODE
         clr     DMA0_BANK
@@ -316,14 +317,14 @@ MfwFailAck
 
 * Warm boot reloads CCP+BDOS from the shared system image.  The destination
 * is physical Z80 bank 0, so use FDC DMA directly rather than CPU copying
-* through logical page D, which belongs to the private service mapping.
+* through logical page E, which belongs to the private service mapping.
 WarmBootReload
         clr     MBOX_DRIVE
         clr     PhysTrack
         clr     PhysSide
         lda     #3
         sta     PhysSector
-        ldx     #$C400
+        ldx     #$DC00
         stx     WBootDest
         ldu     #22
 
@@ -357,8 +358,8 @@ WbrFail
         rts
 
 * Copy the requested 128-byte half of private PhysBuf to the CP/M DMA
-* address.  CP/M 2.2 TPA addresses remain in identity-mapped pages below
-* $D000; the fixed DIRBUF/CSV/ALV workspace remains in identity-mapped F000.
+* address.  The 62K TPA through $DBFF and the high workspace at $F9A0 are
+* identity-mapped for the 6809 because only logical page E is private.
 CopyReadHalfToDma
         ldx     #PhysBuf
         lda     PhysHalf
@@ -395,7 +396,7 @@ CwhLoop
 
 * Runtime copy placed at fixed CPU-card SRAM $FE00.  The CPUCTL write stops
 * the 6809.  When the Z80 later writes CPUCTL=0, the 6809 resumes at the NOP
-* and enters the private resident dispatcher through the logical $DE00 map.
+* and enters the private resident dispatcher through logical $E000.
 TrampolineTemplate
         lda     #$01
         sta     >CPUCTL

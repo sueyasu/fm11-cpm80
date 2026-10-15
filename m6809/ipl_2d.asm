@@ -5,14 +5,15 @@
 * to $0400.  The IPL DMA-loads the CP/M system to Z80 bank-0 RAM and
 * the resident 6809 I/O server to physical RAM above the Z80 space:
 *
-*   disk $0200-$1BFF -> physical $0C400-$0DDFF
-*       CCP + BDOS + BIOS (system56.bin, $1A00 bytes)
+*   disk $0200-$1BFF -> physical $0DC00-$0F5FF
+*       CCP + BDOS + BIOS (system62.bin, $1A00 bytes)
 *
-*   disk $1C00-$1FFF -> physical $10E00-$111FF
+*   disk $1C00-$1FFF -> physical $10000-$103FF
 *       resident 6809 I/O server slot (maximum $0400 bytes)
 *
-* The I/O server remains linked at logical $DE00.  Before entering it,
-* MMR13/MMR14 map logical $D000-$EFFF to physical $10000-$11FFF.
+* The I/O server is linked at logical $E000.  Before entering it, MMR14
+* maps logical $E000-$EFFF to physical $10000-$10FFF.  Logical page D
+* remains identity-mapped so the 62K CP/M TPA can extend through $DBFF.
 * The complete disk stream still fits in the remaining 30 sectors of
 * cylinder 0, so the IPL never performs SEEK/STEP during cold boot.
 ********************************************************************
@@ -36,7 +37,6 @@ FM11_MMR_BASE       equ       $FD80
 FM11_MMR_TASK       equ       $FD90
 FM11_MMR_CTRL       equ       $FD93
 FM11_MMR_ENABLE     equ       $80
-FM11_MMR_PAGE_D     equ       FM11_MMR_BASE+$0D
 FM11_MMR_PAGE_E     equ       FM11_MMR_BASE+$0E
 
 FDC_READSEC         equ       $80
@@ -49,9 +49,9 @@ DMA_COMPLETE        equ       $80
 DMA_READ_MODE       equ       DMA_DIR_READ+DMA_ENABLE
 
 STAGE1_STACK        equ       $2000
-SYSTEM_DEST         equ       $C400
+SYSTEM_DEST         equ       $DC00
 SYSTEM_SECTORS      equ       26
-IOSERVER_DMA_ADDR   equ       $0E00      * physical $10E00, bank=1
+IOSERVER_DMA_ADDR   equ       $0000      * physical $10000, bank=1
 IOSERVER_DMA_BANK   equ       $01
 IOSERVER_SECTORS    equ       4
 SECTORS_PER_SIDE    equ       16
@@ -60,7 +60,7 @@ MBOX_BASE           equ       $FBF6
 MBOX_LEN            equ       10
 CPM_WORK_BASE       equ       $F9A0
 CPM_WORK_LEN        equ       $0248
-IOSERVER_BASE       equ       $DE00
+IOSERVER_BASE       equ       $E000
 
 start               bra       main
                     fcb       0,0,0,0,0,0,0,0,0,0,0
@@ -73,7 +73,7 @@ main                orcc      #$50
                     clr       >FM11_DMA0_MODE
                     clr       >FM11_DMA0_BANK
 
-* The ROM has already read T0/H0/S1-S2.  system56.bin starts at S3.
+* The ROM has already read T0/H0/S1-S2.  system62.bin starts at S3.
                     clr       >FM11_FDC_TRACK
                     clr       >FM11_FDC_SIDE
                     lda       #3
@@ -91,7 +91,7 @@ load_system         lbsr      read_sector_dma
 
 system_loaded
 * Move from the last CP/M system sector (T0/H1/S12) to the first I/O-server
-* sector (T0/H1/S13), then redirect DMA to physical $10E00.
+* sector (T0/H1/S13), then redirect DMA to physical $10000.
                     lbsr      advance_chs
                     lda       #IOSERVER_DMA_BANK
                     sta       >FM11_DMA0_BANK
@@ -130,17 +130,17 @@ clear_workspace     sta       ,x+
                     bne       clear_workspace
 
 * Z80 is released from WAIT with PC=0000. Install:
-*     0000: C3 00 DA    JP DA00
+*     0000: C3 00 F2    JP F200
                     lda       #$C3
                     sta       >$0000
-                    ldd       #$00DA
+                    ldd       #$00F2
                     std       >$0001
                     clra
                     sta       >$0003
                     sta       >$0004
 
 * Build an explicit task-0 identity map while translation is disabled,
-* then replace only logical pages D/E with the private server pages 10/11.
+* then replace only logical page E with private physical page $10.
 * Preserving the non-MMU bits of FD93 avoids changing ROM/RAM selection.
                     lda       >FM11_MMR_CTRL
                     anda      #$7F
@@ -155,15 +155,13 @@ init_mmr            sta       ,x+
                     blo       init_mmr
 
                     lda       #$10
-                    sta       >FM11_MMR_PAGE_D
-                    lda       #$11
                     sta       >FM11_MMR_PAGE_E
 
                     lda       >FM11_MMR_CTRL
                     ora       #FM11_MMR_ENABLE
                     sta       >FM11_MMR_CTRL
 
-* Logical $DE00 now resolves to physical $10E00. IoServerStart installs the
+* Logical $E000 now resolves to physical $10000. IoServerStart installs the
 * fixed-SRAM trampoline and performs the initial hand-off to the Z80.
                     jmp       IOSERVER_BASE
 

@@ -31,35 +31,39 @@ sectors per track entry, and 256-byte sectors.
 DPB `OFF=2` reserves the first two cylinders, giving a 16 KiB system area at
 raw offsets `$0000-$3FFF`.
 
-The system image is stored only once and follows the current RAM layout directly:
+The active system layout is:
 
 ```text
 0000-01FF  IPL (ROM loads this to 6809 $0400)
-0200-1BFF  system56.bin -> Z80 $C400-$DDFF
-1C00-29FF  6809 I/O-server slot -> $DE00-$EBFF
-2A00-3FFF  reserved/zero padding
+0200-1BFF  system62.bin -> Z80 physical $DC00-$F5FF
+1C00-1FFF  6809 I/O-server slot -> physical $10000-$103FF
+2000-3FFF  reserved/zero padding
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
 
-`system56.bin` is exactly `$1A00` bytes. The I/O-server slot is fixed at
-`$0E00` bytes; the actual `ioserver.bin` is followed by zero padding. Therefore
-the IPL can load one fixed 40-sector stream from raw `$0200-$29FF` directly to
-RAM `$C400-$EBFF`.
+`system62.bin` is exactly `$1A00` bytes: `$1600` bytes of CCP+BDOS followed by
+a BIOS slot padded to `$0400` bytes. The I/O-server disk slot is `$0400` bytes.
+Together they occupy exactly the 30 sectors remaining on cylinder 0 after the
+ROM-loaded IPL sectors:
 
-The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. The IPL begins its
-direct load at T0/H0/S3. The first 30 sectors finish cylinder 0 and the final
-10 sectors are T1/H0/S1-S10. A real WD17xx SEEK is issued when the load crosses
-the cylinder boundary.
+```text
+T0/H0/S3-S16
+T0/H1/S1-S16
+```
+
+The IPL loads the first 26 sectors to Z80 physical bank 0 at `$DC00`, then
+loads the final four sectors through DMA bank 1 to physical `$10000`. No SEEK
+or STEP is required during cold boot.
 
 There is no stage-2 loader and no separate warm-boot copy of the CP/M system.
 WBOOT reuses the same system image and reloads only CCP+BDOS (`$1600` bytes,
-22 physical sectors) from raw `$0200-$17FF` to Z80 `$C400-$D9FF`. BIOS and the
-resident 6809 I/O server remain resident.
+22 physical sectors) from raw `$0200-$17FF` directly to Z80 physical
+`$DC00-$F1FF`. BIOS at `$F200-$F5FF` and the private 6809 I/O server remain
+resident.
 
-The image builder rejects an IPL larger than `$0200`, a `system56.bin` whose
-size is not exactly `$1A00`, or an I/O server larger than its current `$0E00`
-RAM slot.
+The image builder rejects an IPL larger than `$0200`, a system payload whose
+size is not exactly `$1A00`, or an I/O server larger than `$0400`.
 
 ## Adding CP/M commands
 

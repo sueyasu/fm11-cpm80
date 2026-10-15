@@ -23,19 +23,20 @@ The shared Z80/6809 mailbox occupies the highest ten bytes of Z80-visible RAM,
 ## 6809 private I/O-server memory
 
 The FM-11 main CPU has sixteen 4 KiB MMR entries. CP/M uses hardware task 0 and
-keeps most of that task identity-mapped, but reserves two logical pages for the
-resident I/O service:
+keeps that task identity-mapped except for logical page E:
 
 ```text
 6809 logical        Physical RAM
-$D000-$DFFF   ->    $10000-$10FFF
-$E000-$EFFF   ->    $11000-$11FFF
+$E000-$EFFF   ->    $10000-$10FFF
 ```
 
-The service remains linked at logical `$DE00`, so its physical image begins at
-`$10E00`. This places the complete current service outside the Z80's physical
-64 KiB bank-0 memory while avoiding a source-level relocation of its internal
-absolute references.
+The I/O server is linked at logical `$E000` and loaded at physical `$10000`.
+The complete current service is limited to `$0400` bytes, so it fits entirely
+inside this one private page.
+
+Keeping logical page D identity-mapped is intentional. The 62K CP/M TPA extends
+through `$DBFF`, so CP/M DMA buffers in the upper TPA remain directly accessible
+to the 6809 service without a temporary MMR remap.
 
 The CPU-card SRAM at `$FE00-$FFEF` is fixed and is not affected by the MMR. The
 CPU hand-off trampoline is installed at `$FE00`, so control can safely cross

@@ -2,15 +2,15 @@
 import argparse
 from pathlib import Path
 
-CCP_BASE = 0xC400
-BIOS_BASE = 0xDA00
-IOSERVER_BASE = 0xDE00
+CCP_BASE = 0xDC00
+BIOS_BASE = 0xF200
+SYSTEM_END = 0xF600
 CORE_SIZE = BIOS_BASE - CCP_BASE
-BIOS_MAX = IOSERVER_BASE - BIOS_BASE
+BIOS_MAX = SYSTEM_END - BIOS_BASE
 
-p = argparse.ArgumentParser(description="Build the FM-11 56K CP/M 2.2 system payload")
-p.add_argument("--core", required=True, help="56K CCP+BDOS image, C400-D9FF")
-p.add_argument("--bios", required=True, help="BIOS image assembled at DA00")
+p = argparse.ArgumentParser(description="Build the FM-11 62K CP/M 2.2 system payload")
+p.add_argument("--core", required=True, help="62K CCP+BDOS image, DC00-F1FF")
+p.add_argument("--bios", required=True, help="BIOS image assembled at F200")
 p.add_argument("--output", required=True)
 a = p.parse_args()
 
@@ -20,15 +20,16 @@ bios = Path(a.bios).read_bytes()
 if len(core) != CORE_SIZE:
     raise SystemExit(
         f"error: CCP+BDOS must be exactly 0x{CORE_SIZE:X} bytes "
-        f"(C400-D9FF); got 0x{len(core):X}"
+        f"(DC00-F1FF); got 0x{len(core):X}"
     )
 if len(bios) > BIOS_MAX:
     raise SystemExit(
-        f"error: BIOS exceeds DA00-DDFF: 0x{len(bios):X} bytes "
+        f"error: BIOS exceeds F200-F5FF: 0x{len(bios):X} bytes "
         f"(maximum 0x{BIOS_MAX:X})"
     )
 
-# Pad the BIOS to DE00 so the generated payload has a stable load extent.
+# Keep the on-disk system payload at 0x1A00 bytes so the I/O-server sectors
+# remain at the same cylinder-0 locations.
 out = core + bios + bytes(BIOS_MAX - len(bios))
 Path(a.output).write_bytes(out)
-print(f"wrote {a.output}: 0x{len(out):X} bytes (C400-DDFF)")
+print(f"wrote {a.output}: 0x{len(out):X} bytes (DC00-F5FF)")

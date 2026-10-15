@@ -25,19 +25,16 @@ MBCMD_WBOOT     equ     $03
 MBSTAT_OK       equ     $00
 MBSTAT_ERROR    equ     $01
 
-* FM-11 4 KiB memory mapper.  CP/M keeps the I/O server linked at logical
-* $DE00, but MMR13/MMR14 map $D000-$EFFF to physical $10000-$11FFF.
-* The server image therefore resides physically at $10E00 while the Z80
-* keeps its independent bank-0 RAM at $DE00.
+* FM-11 4 KiB memory mapper.  The I/O server is linked at logical $E000 and
+* MMR14 maps that one page to physical $10000-$10FFF.  Keeping logical page D
+* identity-mapped is important for 62K CP/M, whose TPA extends through $DBFF.
 MMR_BASE        equ     $FD80
 MMR_TASK        equ     $FD90
 MMR_CTRL        equ     $FD93
 MMR_ENABLE      equ     $80
-MMR_PAGE_D      equ     MMR_BASE+$0D
 MMR_PAGE_E      equ     MMR_BASE+$0E
-IOSERVER_PAGE_D equ     $10
-IOSERVER_PAGE_E equ     $11
-IOSERVER_PHYS_DELTA equ  $3000
+IOSERVER_PAGE_E equ     $10
+IOSERVER_PHYS_DELTA equ  $2000
 
 * Mini FDC, used by the 2D drives A:-D:.
 MINIFDC         equ     $FD18

@@ -1,9 +1,9 @@
 ; FM-11 CP/M 2.2 BIOS
 ;
-; 56K system layout compatible with the Fujitsu memory arrangement:
-;   CCP  = C400h
-;   BDOS = CC00h
-;   BIOS = DA00h
+; 62K system layout:
+;   CCP  = DC00h
+;   BDOS = E400h
+;   BIOS = F200h
 ;   6809 resident service = physical RAM above 10000h
 ;   disk workspace        = F9A0h-FBE7h
 ;   mailbox               = FBF6h-FBFFh
@@ -12,9 +12,9 @@
 
         include "fm11.inc"
 
-CCPBASE:        equ     0C400h
-BDOSENT:        equ     0CC06h
-BIOSBASE:       equ     0DA00h
+CCPBASE:        equ     0DC00h
+BDOSENT:        equ     0E406h
+BIOSBASE:       equ     0F200h
 
 ; CP/M mutable disk workspace is packed directly below the shared mailbox.
 ; These addresses do not emit bytes into the BIOS image.
