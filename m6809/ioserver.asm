@@ -186,6 +186,7 @@ MiniDmaSetup
         rts
 
 * DMA one physical sector from Mini FDC to PhysBuf.
+* X is scratch here; U is preserved for callers such as WarmBootReload.
 MiniFdcReadSector
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
@@ -197,7 +198,7 @@ MiniFdcReadSector
         lda     #FDC_CMD_READSEC
         sta     MINIFDC_STATUS
 
-        ldu     #$FFFF
+        ldx     #$FFFF
 MfrWait
         lda     DMA0_MODE
         bita    #DMA_ERROR
@@ -207,8 +208,8 @@ MfrWait
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
         bne     MfrFail
-        leau    -1,u
-        cmpu    #0
+        leax    -1,x
+        cmpx    #0
         bne     MfrWait
         bra     MfrFail
 
@@ -229,6 +230,7 @@ MfrFailAck
         rts
 
 * DMA PhysBuf as one physical sector to the Mini FDC.
+* X is scratch; do not consume U so higher-level counters remain intact.
 MiniFdcWriteSector
         lbsr    MiniFdcSelect
         lda     MINIFDC_IRQ
@@ -240,7 +242,7 @@ MiniFdcWriteSector
         lda     #FDC_CMD_WRITESEC
         sta     MINIFDC_STATUS
 
-        ldu     #$FFFF
+        ldx     #$FFFF
 MfwWait
         lda     DMA0_MODE
         bita    #DMA_ERROR
@@ -250,8 +252,8 @@ MfwWait
         lda     MINIFDC_STATUS
         bita    #FDC_WRITEERR
         bne     MfwFail
-        leau    -1,u
-        cmpu    #0
+        leax    -1,x
+        cmpx    #0
         bne     MfwWait
         bra     MfwFail
 
