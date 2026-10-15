@@ -9,18 +9,20 @@ The FM-11 ROM IPL loads physical sectors T0/H0/S1-S2 (2 x 256 bytes) to `$0400`
 and transfers control there. This is the same ROM-loading convention used by
 the FM-11 NitrOS-9 Level 1 2D IPL.
 
-Stage 1 disables DMA channel 0 for the Mini FDC, selects drive 0, then reads the
-remaining 62 sectors of the two-cylinder CP/M system area:
+Stage 1 disables DMA channel 0 for the Mini FDC, selects drive 0, then reads only
+the remaining 30 sectors of cylinder 0:
 
 ```text
 T0/H0/S3-S16
 T0/H1/S1-S16
-T1/H0/S1-S16
-T1/H1/S1-S16
 ```
 
-Those sectors are loaded contiguously to `$4000-$7DFF`, after which stage 1
-jumps to `$4000`.
+Those sectors are loaded contiguously to `$4000-$5DFF`, after which stage 1
+jumps to `$4000`.  Keeping the complete stage-2 load on cylinder 0 avoids any
+SEEK/STEP operation in the ROM-loaded IPL and matches the proven NitrOS-9 boot
+pattern, which also stays on track 0.
+
+The stage-2 image therefore has a hard maximum size of `$1E00` bytes.
 
 ## Stage 2
 

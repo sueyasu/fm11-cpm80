@@ -33,17 +33,19 @@ raw offsets `$0000-$3FFF`.
 
 ```text
 0000-01FF  stage-1 IPL (ROM loads this to 6809 $0400)
-0200-3FFF  position-independent stage-2 loader.bin
+0200-1FFF  position-independent stage-2 loader.bin and zero padding
+2000-3FFF  reserved/zero-filled second system cylinder
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
 5000-      file data (allocation block 2 onward)
 ```
 
 The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. Stage 1 then reads
-the remaining 62 system-area sectors, T0/H0/S3 through T1/H1/S16, to
-`$4000-$7DFF` and jumps to `$4000`.
+only the remaining 30 sectors of cylinder 0, T0/H0/S3-S16 followed by
+T0/H1/S1-S16, to `$4000-$5DFF` and jumps to `$4000`.
 
 The image builder rejects an IPL larger than `$0200` bytes or a stage-2 image
-larger than `$3E00` bytes.
+larger than `$1E00` bytes. This guarantees that the ROM-loaded IPL never needs
+to seek away from track 0.
 
 ## Adding CP/M commands
 

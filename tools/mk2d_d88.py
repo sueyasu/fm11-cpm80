@@ -12,7 +12,8 @@ RAW_SIZE = CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 SYSTEM_CYLINDERS = 2
 SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 STAGE1_SIZE = 0x0200
-STAGE2_MAX = SYSTEM_SIZE - STAGE1_SIZE
+BOOT_CYLINDER_SIZE = HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
+STAGE2_MAX = BOOT_CYLINDER_SIZE - STAGE1_SIZE
 
 BLOCK_SIZE = 2048
 TOTAL_BLOCKS = 152          # DPB DSM=151 -> blocks 0..151
@@ -132,13 +133,14 @@ def make_raw(ipl: bytes, loader: bytes, files):
     if len(loader) > STAGE2_MAX:
         raise ValueError(
             f"loader.bin is {len(loader)} bytes; maximum is {STAGE2_MAX} "
-            f"bytes after the 0x200-byte stage-1 area")
+            f"bytes so stage 1 can load it without leaving cylinder 0")
 
     raw = bytearray(b"\xe5" * RAW_SIZE)
 
     # OFF=2 reserves the first two cylinders as a 16 KiB system area.
     # FM-11 ROM loads its first 512 bytes (T0/H0/S1-S2) to $0400.
-    # Stage 1 then reads the remaining 62 sectors into $4000.
+    # Stage 1 loads only the remaining 30 sectors of cylinder 0 to $4000.
+    # Cylinder 1 remains reserved/zero-filled for future system use.
     raw[:SYSTEM_SIZE] = b"\x00" * SYSTEM_SIZE
     raw[:len(ipl)] = ipl
     raw[STAGE1_SIZE:STAGE1_SIZE + len(loader)] = loader
