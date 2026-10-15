@@ -383,7 +383,6 @@ MapZ80DmaWindow
         lsra
         lsra
         lsra
-        sta     Z80Page
         sta     MMR_PAGE_D
         tfr     y,d
         anda    #$0F
@@ -400,7 +399,7 @@ RestoreZ80Window
 * address.  MMR13 is a temporary window onto Z80 physical bank-0 RAM, so the
 * copy remains correct even when the DMA buffer lies in BDOS or other pages
 * not visible at the same logical address to the 6809.  A 4 KiB crossing is
-* handled by advancing the physical page and restarting the D-window at $D000.
+* handled by advancing MMR13 and restarting the D-window at $D000.
 CopyReadHalfToDma
         lbsr    ValidateDmaRange
         bcs     CrhBad
@@ -419,9 +418,7 @@ CrhLoop
         beq     CrhDone
         cmpy    #Z80_WINDOW_END
         bne     CrhLoop
-        inc     Z80Page
-        lda     Z80Page
-        sta     MMR_PAGE_D
+        inc     MMR_PAGE_D
         ldy     #Z80_WINDOW_BASE
         bra     CrhLoop
 CrhDone
@@ -452,9 +449,7 @@ CwhLoop
         beq     CwhDone
         cmpy    #Z80_WINDOW_END
         bne     CwhLoop
-        inc     Z80Page
-        lda     Z80Page
-        sta     MMR_PAGE_D
+        inc     MMR_PAGE_D
         ldy     #Z80_WINDOW_BASE
         bra     CwhLoop
 CwhDone
@@ -482,5 +477,4 @@ PhysHalf        rmb     1
 PhysFdcBase     rmb     2
 WBootDest       rmb     2
 SavedMmrD       rmb     1
-Z80Page         rmb     1
 PhysBuf         rmb     256
