@@ -4,7 +4,7 @@
 * owned by the 6809; the Z80 BIOS communicates only through the EC00
 * mailbox and CPU hand-off at FD05.
 
-        include "../include/6809/fm11.inc"
+        include "fm11.inc"
 
         org     $DE00
 
@@ -172,20 +172,12 @@ DlsBad
 
 * ----------------------------------------------------------------------
 * Read one 256-byte sector from the Mini FDC into PhysBuf.
-*
-* The FM-11 emulator exposes the next DRQ through a status read after each
-* data byte.  Poll DRQ explicitly and use a bounded timeout; do not treat a
-* transient BUSY=0 as completion while the 256-byte transfer is in progress.
-*
-* Carry clear = success, carry set = failure/timeout.
 * ----------------------------------------------------------------------
 MiniFdcReadSector
-* A:-D: map directly to Mini-FDC units 0..3.
         lda     MBOX_DRIVE
         anda    #$03
         sta     MINIFDC_DRIVE
 
-* Program side, cylinder and 1-based physical sector.
         lda     PhysSide
         anda    #$01
         sta     MINIFDC_SIDE
@@ -194,17 +186,14 @@ MiniFdcReadSector
         lda     PhysSector
         sta     MINIFDC_SECTOR
 
-* Acknowledge any stale completion request before starting a new command.
         lda     MINIFDC_IRQ
-
         lda     #FDC_CMD_READSEC
         sta     MINIFDC_STATUS
 
         ldy     #PhysBuf
         clrb                    * 0 means 256 iterations with DECB/BNE
-
 MfrByte
-        ldx     #$FFFF          * bounded wait for one DRQ
+        ldx     #$FFFF
 MfrWaitDrq
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
@@ -213,22 +202,19 @@ MfrWaitDrq
         bne     MfrHaveByte
         leax    -1,x
         bne     MfrWaitDrq
-        bra     MfrFailAck      * timeout
-
+        bra     MfrFailAck
 MfrHaveByte
         lda     MINIFDC_DATA
         sta     ,y+
         decb
         bne     MfrByte
 
-* Transfer finished.  Check final controller status and acknowledge IRQ.
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
         bne     MfrFailAck
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
-
 MfrFailAck
         lda     MINIFDC_IRQ
         orcc    #$01
@@ -236,8 +222,6 @@ MfrFailAck
 
 * ----------------------------------------------------------------------
 * Copy the requested 128-byte half of PhysBuf to the CP/M DMA address.
-* MBOX_DMA_H/L is big-endian so the 6809 can load it as a native pointer.
-* CP/M 2.2 runs in Z80 bank 0, so this is the same physical RAM address.
 * ----------------------------------------------------------------------
 CopyReadHalfToDma
         ldx     #PhysBuf
@@ -260,6 +244,4 @@ PhysSide        rmb     1
 PhysSector      rmb     1
 PhysHalf        rmb     1
 PhysFdcBase     rmb     2
-
-* Physical-sector bounce buffer used by 128/256-byte deblocking.
 PhysBuf         rmb     256
