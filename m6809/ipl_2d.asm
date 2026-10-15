@@ -3,11 +3,8 @@
 *
 * FM-11 ROM IPL loads T0/H0/S1-S2 (512 bytes) to $0400 and jumps
 * to $0400.  This stage-1 then reads the remainder of cylinder 0 only
-* (T0/H0/S3-S16 and T0/H1/S1-S16) to $4000 and jumps there.
+* (T0/H0/S3-S16 and T0/H1/S1-S16) to $2600 and jumps there.
 * The stage-2 image is position independent and must fit in 30 sectors.
-*
-* The Mini FDC register usage and ROM IPL assumptions follow the working
-* FM-11 NitrOS-9 Level 1 2D IPL implementation.
 ********************************************************************
 
                     org       $0400
@@ -25,7 +22,8 @@ FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
-STAGE2_DEST         equ       $4000
+STAGE1_STACK        equ       $2000
+STAGE2_DEST         equ       $2600
 STAGE2_SECTORS      equ       30
 SECTORS_PER_SIDE    equ       16
 
@@ -33,7 +31,7 @@ start               bra       main
                     fcb       0,0,0,0,0,0,0,0,0,0,0
 
 main                orcc      #$50
-                    lds       #$3F00
+                    lds       #STAGE1_STACK
 
 * Boot from 2D drive 0 and force programmed I/O rather than DMA.
                     clr       >FM11_FDC_DRIVE
