@@ -1,10 +1,11 @@
 * FM-11 CP/M-80 6809 loader skeleton.
 *
-* The final load address and stage-1 IPL interface are intentionally left
-* open until the boot-track layout is fixed.  This file defines the cold
-* boot responsibilities and the hand-off contract to ioserver.asm.
+* The final stage-1 IPL load address is still open, but this source is kept
+* independently assemblable so the build can check its syntax now.
 
-        include "../include/6809/fm11.inc"
+        include "fm11.inc"
+
+IOSERVER_BASE   equ     $DE00
 
 LoaderEntry
         orcc    #$50            * IRQ/FIRQ off during cold boot
@@ -15,17 +16,12 @@ LoaderEntry
 *        CCP  = Z80 $C400
 *        BDOS = Z80 $CC00
 *        BIOS = Z80 $DA00
-*   3. install/retain the resident 6809 I/O service at $DE00
-*   4. clear the mailbox at $EC00
-*   5. initialize Mini FDC and Standard FDC to a known state
-*   6. enter IoServerStart; it performs the first FD05 hand-off to Z80
-*
-* No disk-format assumptions should be duplicated here.  All CP/M logical
-* sector interpretation belongs to the resident I/O service.
+*   3. load/retain the resident 6809 I/O service at $DE00-$EFFF
+*   4. leave $F000-$F247 available for CP/M DIRBUF/CSV/ALV workspace
+*   5. clear the mailbox at $EC00
+*   6. initialize Mini FDC and Standard FDC to a known state
+*   7. jump to IoServerStart; it performs the first FD05 hand-off to Z80
 
         clr     MBOX_CMD
         clr     MBOX_STATUS
-
-* During framework development this symbol is expected to be resolved with
-* ioserver.asm by the eventual build/link step.
-        jmp     IoServerStart
+        jmp     IOSERVER_BASE
