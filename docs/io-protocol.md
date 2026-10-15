@@ -1,18 +1,25 @@
 # FM-11 CP/M-80 I/O protocol
 
-The Z80 card does not use the FM-11 peripheral bus as a general-purpose Z80 I/O bus.  The initial implementation therefore follows the hardware architecture rather than attempting direct Z80 FDC access.
+The Z80 card does not use the FM-11 peripheral bus as a general-purpose Z80 I/O bus. The implementation therefore follows the hardware architecture rather than attempting direct Z80 FDC access.
 
 ## CPU hand-off
 
-1. Z80 fills the mailbox at `0xEC00`.
-2. Z80 writes `0` to `$FD05` bit 0.  The Z80 stops and the main 6809 resumes.
-3. The resident 6809 service performs the requested operation.
-4. The 6809 writes the result status to the mailbox.
-5. The 6809 writes `1` to `$FD05` bit 0.  The 6809 stops and the Z80 resumes at the instruction following its hand-off write.
+The Z80-visible mailbox occupies the top ten bytes of Z80 RAM, `$FBF6-$FBFF`. The 6809 hand-off trampoline is copied at cold start to CPU-card fixed SRAM at `$FE00`, which remains visible independently of the MMR.
 
-This is synchronous.  The first implementation deliberately does not depend on Z80 interrupts.
+1. Z80 fills the mailbox at `$FBF6-$FBFF`.
+2. Z80 writes `0` to `$FD05` bit 0. The Z80 stops and the main 6809 resumes inside the fixed-SRAM trampoline at `$FE00`.
+3. The trampoline jumps to the resident 6809 service at `$DE00`.
+4. The resident service performs the requested operation and writes result status to the mailbox.
+5. The service jumps back to the `$FE00` trampoline.
+6. The trampoline writes `1` to `$FD05` bit 0. The 6809 stops and the Z80 resumes at the instruction following its hand-off write.
+
+This is synchronous. The implementation deliberately does not depend on Z80 interrupts.
+
+Keeping the trampoline in fixed CPU-card SRAM means the CPU-switch point does not depend on the 6809 MMR mapping. This is intended to allow the resident service to move to high physical RAM later without changing the hand-off mechanism.
 
 ## Mailbox
+
+Base address: `$FBF6`. The ten-byte block ends exactly at the top of Z80-visible RAM (`$FBFF`) so lower RAM remains free for CP/M use.
 
 | Offset | Name | Meaning |
 |---:|---|---|
@@ -26,16 +33,18 @@ This is synchronous.  The first implementation deliberately does not depend on Z
 
 The Z80 writes 16-bit parameters in high-byte/low-byte order so that the 6809 can load them naturally.
 
+If the protocol later needs more fields, the mailbox can grow downward from `$FBF6` while keeping its upper end at `$FBFF`.
+
 ## Commands
 
 - `00` idle/no command
 - `01` read one CP/M 128-byte logical sector
 - `02` write one CP/M 128-byte logical sector
-- `03` warm-boot system reload (reserved for the next implementation stage)
+- `03` warm-boot system reload
 
 ## Division of responsibility
 
-The Z80 BIOS keeps the current CP/M drive, track, sector and DMA address.  `READ` and `WRITE` copy these parameters to the mailbox and hand control to the 6809.
+The Z80 BIOS keeps the current CP/M drive, track, sector and DMA address. `READ` and `WRITE` copy these parameters to the mailbox and hand control to the 6809.
 
 The 6809 service owns:
 
@@ -43,7 +52,5 @@ The 6809 service owns:
 - Standard FDC for 2HD drives E:-H:
 - physical 256-byte sector operations
 - 128/256-byte deblocking
-- retry/error handling
-- later DMA optimisation
-
-The first low-level disk implementation should use polling/PIO where practical.  DMA can be introduced after the command path is proven.
+- DMA transfer and error handling
+- CPU hand-off through the fixed-SRAM trampoline

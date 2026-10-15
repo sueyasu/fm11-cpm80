@@ -42,7 +42,7 @@ SYSTEM_DEST         equ       $C400
 SYSTEM_SECTORS      equ       30
 SECTORS_PER_SIDE    equ       16
 
-MBOX_BASE           equ       $EC00
+MBOX_BASE           equ       $FBF6
 MBOX_LEN            equ       10
 CPM_WORK_BASE       equ       $F000
 CPM_WORK_LEN        equ       $0248
@@ -81,7 +81,7 @@ load_done
 * Leave DMA channel 0 disabled before entering the resident service.
                     clr       >FM11_DMA0_MODE
 
-* Clear Z80/6809 mailbox.
+* Clear Z80/6809 mailbox at the top of Z80-visible RAM.
                     ldx       #MBOX_BASE
                     ldu       #MBOX_LEN
                     clra
@@ -109,7 +109,7 @@ clear_workspace     sta       ,x+
                     sta       >$0003
                     sta       >$0004
 
-* IoServerStart performs the initial FD05 hand-off to the Z80.
+* IoServerStart installs the fixed-SRAM trampoline and hands off to Z80.
                     jmp       IOSERVER_BASE
 
 * Advance only within cylinder 0:

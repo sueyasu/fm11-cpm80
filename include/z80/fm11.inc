@@ -15,9 +15,9 @@ FM11_SER_STAT:  equ     0FD07h
 I8251_TXRDY:    equ     01h
 I8251_RXRDY:    equ     02h
 
-; Shared mailbox. This is deliberately outside the CP/M 56K system image
-; and follows the area used by Fujitsu's CP/M implementation.
-MBOX_BASE:      equ     0EC00h
+; Shared mailbox. Place the ten-byte communication block at the very top
+; of Z80-visible RAM so lower memory remains available to CP/M.
+MBOX_BASE:      equ     0FBF6h
 MBOX_CMD:       equ     MBOX_BASE+0
 MBOX_STATUS:    equ     MBOX_BASE+1
 MBOX_DRIVE:     equ     MBOX_BASE+2

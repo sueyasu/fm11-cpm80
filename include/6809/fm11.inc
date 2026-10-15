@@ -1,10 +1,11 @@
 * FM-11 hardware definitions for the 6809 resident service.
 *
-* The mailbox is in RAM shared with the Z80 while bank 0 is active.
+* The mailbox occupies the top ten bytes of Z80-visible RAM.  Keeping it
+* at $FBF6-$FBFF leaves the lower address space available for CP/M use.
 
 CPUCTL          equ     $FD05
 
-MBOX_BASE       equ     $EC00
+MBOX_BASE       equ     $FBF6
 MBOX_CMD        equ     MBOX_BASE+0
 MBOX_STATUS     equ     MBOX_BASE+1
 MBOX_DRIVE      equ     MBOX_BASE+2
