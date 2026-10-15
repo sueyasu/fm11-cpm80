@@ -39,9 +39,15 @@ raw offsets `$0000-$3FFF`.
 5000-      file data (allocation block 2 onward)
 ```
 
-The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. Stage 1 then reads
-only the remaining 30 sectors of cylinder 0, T0/H0/S3-S16 followed by
-T0/H1/S1-S16, to `$4000-$5DFF` and jumps to `$4000`.
+The FM-11 ROM loads T0/H0/S1-S2 to `$0400` and jumps there. Stage 1 uses
+`$2000` as its stack, then reads only the remaining 30 sectors of cylinder 0,
+T0/H0/S3-S16 followed by T0/H1/S1-S16, to `$2600-$43FF` and jumps to `$2600`.
+
+The `$2600` stage-2 start address is part of the boot memory map. Testing showed
+that starting the 6809 stage-2 at `$4000` caused unstable execution, while the
+same position-independent loader starting below `$4000` booted CP/M through the
+CCP prompt and `DIR`. The loaded image is allowed to extend above `$4000`; the
+observed restriction applies to its execution start address.
 
 The image builder rejects an IPL larger than `$0200` bytes or a stage-2 image
 larger than `$1E00` bytes. This guarantees that the ROM-loaded IPL never needs

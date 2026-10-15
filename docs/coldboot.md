@@ -9,18 +9,25 @@ The FM-11 ROM IPL loads physical sectors T0/H0/S1-S2 (2 x 256 bytes) to `$0400`
 and transfers control there. This is the same ROM-loading convention used by
 the FM-11 NitrOS-9 Level 1 2D IPL.
 
-Stage 1 disables DMA channel 0 for the Mini FDC, selects drive 0, then reads only
-the remaining 30 sectors of cylinder 0:
+Stage 1 uses `$2000` as its stack, disables DMA channel 0 for the Mini FDC,
+selects drive 0, then reads only the remaining 30 sectors of cylinder 0:
 
 ```text
 T0/H0/S3-S16
 T0/H1/S1-S16
 ```
 
-Those sectors are loaded contiguously to `$4000-$5DFF`, after which stage 1
-jumps to `$4000`.  Keeping the complete stage-2 load on cylinder 0 avoids any
-SEEK/STEP operation in the ROM-loaded IPL and matches the proven NitrOS-9 boot
-pattern, which also stays on track 0.
+Those sectors are loaded contiguously to `$2600-$43FF`, after which stage 1
+jumps to `$2600`. Keeping the complete stage-2 disk read on cylinder 0 avoids
+any SEEK/STEP operation in the ROM-loaded IPL and matches the proven NitrOS-9
+boot pattern, which also stays on track 0.
+
+`$2600` is the established stage-2 execution address for this port. FM-11 boot
+testing showed that placing the stage-2 entry at `$4000` caused unstable 6809
+execution, while moving the same position-independent image below `$4000`
+allowed CP/M to reach the CCP prompt and successfully execute `DIR`. The image
+itself may extend above `$4000`; the observed restriction concerns the stage-2
+execution start address.
 
 The stage-2 image therefore has a hard maximum size of `$1E00` bytes.
 
@@ -45,6 +52,6 @@ At run time stage 2:
 `$0000`, jumps to the BIOS cold-boot entry at `$DA00`, and the BIOS continues
 to the CCP at `$C400`.
 
-The fixed stage-2 load address `$4000` is deliberately outside the destination
-range `$C400-$F247`, so stage 2 can safely copy its embedded payloads to their
-final locations.
+The stage-2 load region `$2600-$43FF` is temporary boot storage. The loader is
+position independent and copies its embedded payloads to their final locations
+before transferring control to the resident I/O server.

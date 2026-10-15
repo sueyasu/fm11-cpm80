@@ -5,6 +5,11 @@
 * to $0400.  This stage-1 then reads the remainder of cylinder 0 only
 * (T0/H0/S3-S16 and T0/H1/S1-S16) to $2600 and jumps there.
 * The stage-2 image is position independent and must fit in 30 sectors.
+*
+* $2600 is the established stage-2 execution address.  FM-11 testing has
+* shown that starting the 6809 stage-2 at $4000 or above is unreliable,
+* while execution from below $4000 is stable.  The stage-1 stack therefore
+* lives separately at $2000.
 ********************************************************************
 
                     org       $0400
