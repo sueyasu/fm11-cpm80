@@ -21,6 +21,13 @@ BOOT_2D         equ    $00
 BOOT_2HD        equ    $01
 SYSTEM_TRACK    equ    1
 
+* One CP/M track is one complete cylinder: 32 physical 256-byte sectors for
+* 2D, or 52 for 2HD.  Reserve four physical 4 KiB pages ($12000-$15FFF),
+* immediately above the two I/O-server pages, and map them temporarily through
+* logical page C.  Sectors are filled lazily and writes remain write-through.
+CACHE_PAGE_BASE equ    $12
+CACHE_MAX_SECTORS equ  52
+
         org     $D000
 
 IoServerStart
@@ -31,6 +38,7 @@ IoServerStart
         clr     MBOX_STATUS
         clr     LocalKeyValid
         clr     LocalKeyChar
+        lbsr    CacheInvalidate
 
         ldx     #TrampolineTemplate
         ldy     #TRAMPOLINE_BASE
@@ -95,13 +103,7 @@ ServiceRead
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-        lda     PhysIs2HD
-        bne     ServiceRead2HD
-        lbsr    MiniFdcReadSector
-        bra     ServiceReadCopy
-ServiceRead2HD
-        lbsr    StdFdcReadSector
-ServiceReadCopy
+        lbsr    ReadPhysicalCached
         lbcs    ServiceBad
         lbsr    CopyReadHalfToDma
         lbcs    ServiceBad
@@ -116,29 +118,35 @@ ServiceWrite
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
+
+* Preserve the other 128-byte half.  A cache hit avoids the FDC read that was
+* previously required before every CP/M logical-sector write.
+        lbsr    ReadPhysicalCached
+        lbcs    ServiceBad
+        lbsr    CopyDmaToWriteHalf
+        lbcs    ServiceBad
         lda     PhysIs2HD
         bne     ServiceWrite2HD
-        lbsr    MiniFdcReadSector
-        lbcs    ServiceBad
-        lbsr    CopyDmaToWriteHalf
-        lbcs    ServiceBad
         lbsr    MiniFdcWriteSector
-        bra     ServiceWriteDone
+        bra     ServiceWriteCommit
 ServiceWrite2HD
-        lbsr    StdFdcReadSector
-        lbcs    ServiceBad
-        lbsr    CopyDmaToWriteHalf
-        lbcs    ServiceBad
         lbsr    StdFdcWriteSector
-ServiceWriteDone
-        lbcs    ServiceBad
+ServiceWriteCommit
+        bcs     ServiceWriteFail
+        lbsr    CacheStoreSector
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
+ServiceWriteFail
+        lbsr    CacheInvalidate
+        lbra    ServiceBad
 
 ServiceWBoot
         lbsr    WarmBootReload
         lbcs    ServiceBad
+* A successful warm boot proves the boot medium was read again.  Drop any data
+* cache from before the warm boot so a swapped disk cannot reuse old sectors.
+        lbsr    CacheInvalidate
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
@@ -315,6 +323,159 @@ LkfFail
         clra
         orcc    #$01
         puls    b,x,pc
+
+********************************************************************
+* One-track physical-sector cache
+********************************************************************
+
+* Invalidate both the tag and all per-sector valid bytes.  Cache data itself
+* need not be cleared because it is unreachable until the corresponding valid
+* byte is set again.
+CacheInvalidate
+        clr     CacheTagValid
+        ldx     #CacheValidMap
+        ldb     #CACHE_MAX_SECTORS
+        clra
+CiLoop
+        sta     ,x+
+        decb
+        bne     CiLoop
+        rts
+
+* Ensure the current physical drive/controller/track has a cache tag.  A tag
+* change discards the previous track and starts a new lazy-fill cache.
+CachePrepareTrack
+        tst     CacheTagValid
+        beq     CptReset
+        lda     CacheDrive
+        cmpa    PhysDrive
+        bne     CptReset
+        lda     CacheTrack
+        cmpa    PhysTrack
+        bne     CptReset
+        lda     CacheIs2HD
+        cmpa    PhysIs2HD
+        bne     CptReset
+        rts
+CptReset
+        lbsr    CacheInvalidate
+        lda     PhysDrive
+        sta     CacheDrive
+        lda     PhysTrack
+        sta     CacheTrack
+        lda     PhysIs2HD
+        sta     CacheIs2HD
+        lda     #1
+        sta     CacheTagValid
+        rts
+
+* Return B = physical-sector index within the cached cylinder.
+* 2D:  side 0 = 0..15, side 1 = 16..31
+* 2HD: side 0 = 0..25, side 1 = 26..51
+CacheSectorIndex
+        ldb     PhysSector
+        decb
+        tst     PhysSide
+        beq     CsiDone
+        lda     PhysIs2HD
+        bne     Csi2HD
+        addb    #16
+        bra     CsiDone
+Csi2HD
+        addb    #26
+CsiDone
+        rts
+
+* Map the cache sector selected by B into logical page C.  Each physical 4 KiB
+* page holds sixteen 256-byte sectors, so index>>4 selects the MMR page and
+* index&15 selects the high byte inside $C000-$CFFF.  Returns Y=sector address.
+CacheMapSector
+        stb     CacheIndex
+        lda     MMR_PAGE_C
+        sta     SavedMmrC
+        lda     CacheIndex
+        lsra
+        lsra
+        lsra
+        lsra
+        adda    #CACHE_PAGE_BASE
+        sta     MMR_PAGE_C
+        lda     CacheIndex
+        anda    #$0F
+        adda    #$C0
+        clrb
+        tfr     d,y
+        rts
+
+* Copy a cached physical sector into PhysBuf. Carry set means cache miss.
+CacheLoadSector
+        lbsr    CachePrepareTrack
+        lbsr    CacheSectorIndex
+        stb     CacheIndex
+        ldx     #CacheValidMap
+        abx
+        tst     ,x
+        beq     ClsMiss
+        ldb     CacheIndex
+        lbsr    CacheMapSector
+        ldx     #PhysBuf
+        clrb
+ClsCopy
+        lda     ,y+
+        sta     ,x+
+        decb
+        bne     ClsCopy
+        lbsr    RestoreZ80Window
+        andcc   #$FE
+        rts
+ClsMiss
+        orcc    #$01
+        rts
+
+* Copy PhysBuf into the current physical-sector cache slot and mark it valid.
+CacheStoreSector
+        lbsr    CachePrepareTrack
+        lbsr    CacheSectorIndex
+        stb     CacheIndex
+        lbsr    CacheMapSector
+        ldx     #PhysBuf
+        clrb
+CssCopy
+        lda     ,x+
+        sta     ,y+
+        decb
+        bne     CssCopy
+        lbsr    RestoreZ80Window
+        ldb     CacheIndex
+        ldx     #CacheValidMap
+        abx
+        lda     #1
+        sta     ,x
+        andcc   #$FE
+        rts
+
+* Return the requested 256-byte physical sector in PhysBuf.  On a cache miss,
+* perform the FDC read and populate the cache.  An FDC failure invalidates the
+* whole tag so a possible media change cannot leave stale sectors reachable.
+ReadPhysicalCached
+        lbsr    CacheLoadSector
+        bcc     RpcDone
+        lda     PhysIs2HD
+        bne     Rpc2HD
+        lbsr    MiniFdcReadSector
+        bra     RpcReadDone
+Rpc2HD
+        lbsr    StdFdcReadSector
+RpcReadDone
+        bcs     RpcFail
+        lbsr    CacheStoreSector
+RpcDone
+        andcc   #$FE
+        rts
+RpcFail
+        lbsr    CacheInvalidate
+        orcc    #$01
+        rts
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -931,4 +1092,10 @@ WBootDest       rmb     2
 SavedMmrC       rmb     1
 LocalKeyValid   rmb     1
 LocalKeyChar    rmb     1
+CacheTagValid   rmb     1
+CacheDrive      rmb     1
+CacheTrack      rmb     1
+CacheIs2HD      rmb     1
+CacheIndex      rmb     1
+CacheValidMap   rmb     CACHE_MAX_SECTORS
 PhysBuf         rmb     256
