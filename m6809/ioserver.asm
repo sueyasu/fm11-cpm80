@@ -29,6 +29,8 @@ IoServerStart
         sta     BOOTTYPE
         clr     MBOX_CMD
         clr     MBOX_STATUS
+        clr     LocalKeyValid
+        clr     LocalKeyChar
 
         ldx     #TrampolineTemplate
         ldy     #TRAMPOLINE_BASE
@@ -74,6 +76,12 @@ ServiceLoop
         beq     ServiceWrite
         cmpb    #MBCMD_WBOOT
         lbeq    ServiceWBoot
+        cmpb    #MBCMD_LOCAL_CONST
+        lbeq    ServiceLocalConst
+        cmpb    #MBCMD_LOCAL_CONIN
+        lbeq    ServiceLocalIn
+        cmpb    #MBCMD_LOCAL_CONOUT
+        lbeq    ServiceLocalOut
 
 ServiceBad
         lda     #MBSTAT_ERROR
@@ -133,10 +141,180 @@ ServiceWBoot
         lbcs    ServiceBad
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
+        bra     ServiceDone
+
+* Local console services use the FM-11 Display Sub System protocol proven by
+* the NitrOS-9 fm11console driver.  Output is native FM-11 character output;
+* ANSI/VT100 translation is intentionally left for a later layer.
+ServiceLocalOut
+        lda     MBOX_DATA
+        lbsr    LocalPutC
+        lbcs    ServiceBad
+        lda     #MBSTAT_OK
+        sta     MBOX_STATUS
+        bra     ServiceDone
+
+ServiceLocalConst
+        lbsr    LocalKeyPoll
+        lbcs    ServiceBad
+        lda     LocalKeyValid
+        beq     SlcNone
+        lda     #$FF
+        bra     SlcStore
+SlcNone
+        clra
+SlcStore
+        sta     MBOX_DATA
+        lda     #MBSTAT_OK
+        sta     MBOX_STATUS
+        bra     ServiceDone
+
+ServiceLocalIn
+SliWait
+        lbsr    LocalKeyPoll
+        lbcs    ServiceBad
+        tst     LocalKeyValid
+        beq     SliWait
+        lda     LocalKeyChar
+        sta     MBOX_DATA
+        clr     LocalKeyValid
+        lda     #MBSTAT_OK
+        sta     MBOX_STATUS
 
 ServiceDone
         clr     MBOX_CMD
         jmp     TRAMPOLINE_BASE
+
+* Send A through Display Sub System CHARACTER OUT ($12).  FD05 bit 7 controls
+* the subsystem while bit 0 remains clear so the 6809 retains the machine.
+LocalPutC
+        pshs    b,x
+        tfr     a,b
+        ldx     #SUB_WAIT_MAX
+LpcWaitReady
+        lda     >CPUCTL
+        bpl     LpcHalt
+        leax    -1,x
+        cmpx    #0
+        bne     LpcWaitReady
+        bra     LpcFail
+LpcHalt
+        lda     #SUB_HALT
+        sta     >CPUCTL
+        ldx     #SUB_WAIT_MAX
+LpcWaitHalt
+        lda     >CPUCTL
+        bmi     LpcInstall
+        leax    -1,x
+        cmpx    #0
+        bne     LpcWaitHalt
+        clr     >CPUCTL
+        bra     LpcFail
+LpcInstall
+        clr     >FM11_SUB_SHARED
+        clr     >FM11_SUB_SHARED+1
+        lda     #SUB_CHAR_OUT
+        sta     >FM11_SUB_SHARED+2
+        stb     >FM11_SUB_SHARED+3
+        clr     >CPUCTL
+        ldx     #SUB_WAIT_MAX
+LpcWaitDone
+        lda     >CPUCTL
+        bpl     LpcDone
+        leax    -1,x
+        cmpx    #0
+        bne     LpcWaitDone
+LpcFail
+        orcc    #$01
+        puls    b,x,pc
+LpcDone
+        andcc   #$FE
+        puls    b,x,pc
+
+* Poll INKEY 2 ($2D).  ASCII/control keys are cached for CONST/CONIN.  The
+* confirmed FM-11 extended DEL code $0114 is normalized to ASCII DEL; other
+* extended keys are ignored until the ANSI keyboard-sequence layer is added.
+LocalKeyPoll
+        tst     LocalKeyValid
+        bne     LkpReady
+        lbsr    LocalKeyFetch
+        bcs     LkpFail
+        tsta
+        beq     LkpNone
+        sta     LocalKeyChar
+        lda     #1
+        sta     LocalKeyValid
+LkpReady
+        andcc   #$FE
+        rts
+LkpNone
+        andcc   #$FE
+        rts
+LkpFail
+        orcc    #$01
+        rts
+
+LocalKeyFetch
+        pshs    b,x
+        ldx     #SUB_WAIT_MAX
+LkfWaitReady
+        lda     >CPUCTL
+        bpl     LkfHalt
+        leax    -1,x
+        cmpx    #0
+        bne     LkfWaitReady
+        bra     LkfFail
+LkfHalt
+        lda     #SUB_HALT
+        sta     >CPUCTL
+        ldx     #SUB_WAIT_MAX
+LkfWaitHalt
+        lda     >CPUCTL
+        bmi     LkfInstall
+        leax    -1,x
+        cmpx    #0
+        bne     LkfWaitHalt
+        clr     >CPUCTL
+        bra     LkfFail
+LkfInstall
+        clr     >FM11_SUB_SHARED
+        clr     >FM11_SUB_SHARED+1
+        lda     #SUB_INKEY2
+        sta     >FM11_SUB_SHARED+2
+        clr     >FM11_SUB_SHARED+3
+        clr     >FM11_SUB_SHARED+4
+        clr     >CPUCTL
+        ldx     #SUB_WAIT_MAX
+LkfWaitDone
+        lda     >CPUCTL
+        bpl     LkfResult
+        leax    -1,x
+        cmpx    #0
+        bne     LkfWaitDone
+        bra     LkfFail
+LkfResult
+        lda     >FM11_SUB_SHARED+3
+        beq     LkfAscii
+        cmpa    #$01
+        bne     LkfNoKey
+        lda     >FM11_SUB_SHARED+4
+        cmpa    #$14
+        bne     LkfNoKey
+        lda     #$7F
+        andcc   #$FE
+        puls    b,x,pc
+LkfAscii
+        lda     >FM11_SUB_SHARED+4
+        andcc   #$FE
+        puls    b,x,pc
+LkfNoKey
+        clra
+        andcc   #$FE
+        puls    b,x,pc
+LkfFail
+        clra
+        orcc    #$01
+        puls    b,x,pc
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -751,4 +929,6 @@ PhysDrive       rmb     1
 PhysIs2HD       rmb     1
 WBootDest       rmb     2
 SavedMmrC       rmb     1
+LocalKeyValid   rmb     1
+LocalKeyChar    rmb     1
 PhysBuf         rmb     256

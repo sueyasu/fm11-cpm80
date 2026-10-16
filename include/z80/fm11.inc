@@ -22,6 +22,7 @@ MBOX_CMD:       equ     MBOX_BASE+0
 MBOX_STATUS:    equ     MBOX_BASE+1
 MBOX_DRIVE:     equ     MBOX_BASE+2
 MBOX_FLAGS:     equ     MBOX_BASE+3
+MBOX_DATA:      equ     MBOX_FLAGS
 MBOX_TRACK_H:   equ     MBOX_BASE+4
 MBOX_TRACK_L:   equ     MBOX_BASE+5
 MBOX_SECTOR_H:  equ     MBOX_BASE+6
@@ -33,6 +34,9 @@ MBCMD_NONE:     equ     00h
 MBCMD_READ:     equ     01h
 MBCMD_WRITE:    equ     02h
 MBCMD_WBOOT:    equ     03h
+MBCMD_LOCAL_CONST:  equ 10h
+MBCMD_LOCAL_CONIN:  equ 11h
+MBCMD_LOCAL_CONOUT: equ 12h
 
 MBSTAT_OK:      equ     00h
 MBSTAT_ERROR:   equ     01h

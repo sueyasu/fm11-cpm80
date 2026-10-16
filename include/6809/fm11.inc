@@ -10,6 +10,7 @@ MBOX_CMD        equ     MBOX_BASE+0
 MBOX_STATUS     equ     MBOX_BASE+1
 MBOX_DRIVE      equ     MBOX_BASE+2
 MBOX_FLAGS      equ     MBOX_BASE+3
+MBOX_DATA       equ     MBOX_FLAGS
 MBOX_TRACK_H    equ     MBOX_BASE+4
 MBOX_TRACK_L    equ     MBOX_BASE+5
 MBOX_SECTOR_H   equ     MBOX_BASE+6
@@ -21,9 +22,21 @@ MBCMD_NONE      equ     $00
 MBCMD_READ      equ     $01
 MBCMD_WRITE     equ     $02
 MBCMD_WBOOT     equ     $03
+MBCMD_LOCAL_CONST equ   $10
+MBCMD_LOCAL_CONIN equ   $11
+MBCMD_LOCAL_CONOUT equ  $12
 
 MBSTAT_OK       equ     $00
 MBSTAT_ERROR    equ     $01
+
+* Display Sub System interface used by the FM-11 local console.  FD05 has
+* independent control bits: bit 0 selects the Z80/main-CPU owner, while bit 7
+* halts/releases the Display Sub System.  Console service runs with bit 0 clear.
+FM11_SUB_SHARED equ     $FC80
+SUB_CHAR_OUT    equ     $12
+SUB_INKEY2      equ     $2D
+SUB_HALT        equ     $80
+SUB_WAIT_MAX    equ     $FFFF
 
 * FM-11 4 KiB memory mapper.  Reserve logical $D000-$EFFF as an 8 KiB
 * resident window for the I/O server: MMR13 maps physical $10000-$10FFF and

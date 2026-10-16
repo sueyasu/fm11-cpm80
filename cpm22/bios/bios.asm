@@ -68,7 +68,7 @@ ALV7:           equ     ALV6+31
 boot:
         xor     a
         ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
-        ld      (0003h),a       ; IOBYTE
+        ld      (0003h),a       ; IOBYTE: CON:=TTY keeps serial as default
         ld      (0004h),a       ; current disk/user = user 0, A:
         ld      (curdrv),a
         ld      hl,0080h
@@ -149,12 +149,12 @@ setvec:
         ret
 
 ; ----------------------------------------------------------------------
-; Console: direct access to the Z80-visible standard 8251.
+; Console.
 ;
-; Use the conventional defensive 8251 initialization sequence. Three zero
-; writes force a known command/mode phase, 40h performs an internal reset,
-; 4Eh selects asynchronous x16, 8 data bits, no parity, one stop bit, and
-; 27h enables Tx/Rx with DTR/RTS asserted.
+; CP/M IOBYTE bits 0-1 select CON:.  TTY (00) remains the direct Z80 8251
+; serial console.  CRT (01) selects the FM-11 local screen/keyboard through
+; the resident 6809 I/O server.  BAT and UC1 currently fall back to TTY.
+; LIST/PUNCH/READER stay on the serial device and do not follow CON:.
 ; ----------------------------------------------------------------------
 
 serial_init:
@@ -170,17 +170,37 @@ serial_init:
         ld      (FM11_SER_STAT),a
         ret
 
-; CP/M requires CONST to return 00h if no character is ready and FFh if one
-; is ready.  Do not return the raw 8251 RxRDY bit (02h): BDOS masks bit 0
-; while polling for console break/status input.
 const:
+        ld      a,(0003h)
+        and     03h
+        cp      01h
+        jr      z,local_const
+
+serial_const:
         ld      a,(FM11_SER_STAT)
         and     I8251_RXRDY
         ret     z
         ld      a,0FFh
         ret
 
+local_const:
+        ld      a,MBCMD_LOCAL_CONST
+        call    mbox_simple
+        or      a
+        jr      nz,.not_ready
+        ld      a,(MBOX_DATA)
+        ret
+.not_ready:
+        xor     a
+        ret
+
 conin:
+        ld      a,(0003h)
+        and     03h
+        cp      01h
+        jr      z,local_conin
+
+serial_conin:
 .conin_wait:
         ld      a,(FM11_SER_STAT)
         and     I8251_RXRDY
@@ -189,7 +209,23 @@ conin:
         and     07Fh
         ret
 
+local_conin:
+.retry:
+        ld      a,MBCMD_LOCAL_CONIN
+        call    mbox_simple
+        or      a
+        jr      nz,.retry
+        ld      a,(MBOX_DATA)
+        and     07Fh
+        ret
+
 conout:
+        ld      a,(0003h)
+        and     03h
+        cp      01h
+        jr      z,local_conout
+
+serial_conout:
         push    af
 .conout_wait:
         ld      a,(FM11_SER_STAT)
@@ -200,14 +236,24 @@ conout:
         ld      (FM11_SER_DATA),a
         ret
 
+local_conout:
+.retry:
+        ld      a,c
+        ld      (MBOX_DATA),a
+        ld      a,MBCMD_LOCAL_CONOUT
+        call    mbox_simple
+        or      a
+        jr      nz,.retry
+        ret
+
 list:
-        jp      conout
+        jp      serial_conout
 
 punch:
-        jp      conout
+        jp      serial_conout
 
 reader:
-        jp      conin
+        jp      serial_conin
 
 listst:
         ld      a,0FFh
