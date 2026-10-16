@@ -16,6 +16,7 @@
 CCPBASE:        equ     0DC00h
 BDOSENT:        equ     0E406h
 BIOSBASE:       equ     0F200h
+WBOOTENT:       equ     BIOSBASE+3
 BOOTTYPE:       equ     0FBF5h
 BOOT_2D:        equ     00h
 BOOT_2HD:       equ     01h
@@ -167,10 +168,18 @@ wboot:
         call    setvec
         jp      CCPBASE
 
+; CP/M page-zero ABI:
+;   0000h-0002h = JP to the BIOS WBOOT jump-table entry
+;   0003h       = IOBYTE
+;   0004h       = current user/drive byte
+;   0005h-0007h = JP to the BDOS entry
+; Keep 0001h pointing at the WBOOT entry in the BIOS jump table, not at the
+; wboot implementation routine.  CP/M software may derive the other BIOS
+; entry points from this standard vector.
 setvec:
         ld      a,0C3h          ; JP opcode
         ld      (0000h),a
-        ld      hl,wboot
+        ld      hl,WBOOTENT
         ld      (0001h),hl
         ld      (0005h),a
         ld      hl,BDOSENT
