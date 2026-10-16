@@ -68,29 +68,58 @@ ALV7:           equ     ALV6+31
 boot:
         xor     a
         ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
-        ld      (0003h),a       ; IOBYTE: CON:=TTY keeps serial as default
+        inc     a
+        ld      (0003h),a       ; IOBYTE: CON:=CRT selects FM-11 local console
+        xor     a
         ld      (0004h),a       ; current disk/user = user 0, A:
         ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl
-        call    serial_init
+        call    serial_init     ; keep TTY ready for STAT CON:=TTY:
         call    setvec
+        call    cold_banner
         xor     a
         ld      c,a             ; CCP entry C = uuuudddd = 00h
         jp      CCPBASE
 
+; Cold-boot presentation is local-console only.  FM-11 native control $16
+; clears both graphic and character screens.  Do not repeat this on WBOOT.
+cold_banner:
+        ld      c,016h
+        call    local_conout
+        ld      hl,bootmsg
+.cold_banner_loop:
+        ld      a,(hl)
+        or      a
+        jr      z,.cold_banner_done
+        ld      c,a
+        push    hl
+        call    local_conout
+        pop     hl
+        inc     hl
+        jr      .cold_banner_loop
+.cold_banner_done:
+        ld      c,00Dh
+        call    local_conout
+        ld      c,00Ah
+        call    local_conout
+        ret
+
+bootmsg:
+        db      "CP/M-80 v2.2 for FM-11 series.",0
+
 ; Reload CCP+BDOS from the reserved system tracks on the boot disk.
 ; CP/M page zero byte 0004h is uuuudddd: high nibble = user number,
-; low nibble = current drive.  CCP requires that complete byte in C on entry.
+; low nibble = current drive. CCP requires that complete byte in C on entry.
 ;
 ; WBOOT can be entered from inside BDOS via JP 0000h, leaving SP in memory
-; that is part of the CCP/BDOS image about to be reloaded.  Switch to a fixed
+; that is part of the CCP/BDOS image about to be reloaded. Switch to a fixed
 ; stack immediately below the BIOS disk workspace before making any calls.
 ; F960h lies above the reload range (DC00h-F1FFh), while the downward-growing
 ; stack remains below DIRBUF at F970h.
 ;
-; A fatal BDOS disk error can leave 0004h naming the drive that failed.  Before
-; restoring a non-A: drive after WBOOT, probe its first data track.  If the
+; A fatal BDOS disk error can leave 0004h naming the drive that failed. Before
+; restoring a non-A: drive after WBOOT, probe its first data track. If the
 ; drive/media is unavailable, fall back to A:, whose availability has already
 ; been proven by the successful system reload above.
 wboot:
@@ -151,9 +180,9 @@ setvec:
 ; ----------------------------------------------------------------------
 ; Console.
 ;
-; CP/M IOBYTE bits 0-1 select CON:.  TTY (00) remains the direct Z80 8251
-; serial console.  CRT (01) selects the FM-11 local screen/keyboard through
-; the resident 6809 I/O server.  BAT and UC1 currently fall back to TTY.
+; CP/M IOBYTE bits 0-1 select CON:. CRT (01) is the default and selects the
+; FM-11 local screen/keyboard through the resident 6809 I/O server. TTY (00)
+; remains the direct Z80 8251 serial console. BAT and UC1 fall back to TTY.
 ; LIST/PUNCH/READER stay on the serial device and do not follow CON:.
 ; ----------------------------------------------------------------------
 
@@ -267,8 +296,8 @@ home:
         ld      bc,0
         jp      settrk
 
-; C = CP/M drive number 0..7.  A:-D: always name the controller family from
-; which CP/M booted; E:-H: name the other family.  BOOTTYPE=0 means
+; C = CP/M drive number 0..7. A:-D: always name the controller family from
+; which CP/M booted; E:-H: name the other family. BOOTTYPE=0 means
 ; A:-D:=2D and E:-H:=2HD. BOOTTYPE=1 reverses those assignments.
 ; Returns HL=DPH or HL=0 if unsupported. The selected DPH's DPB pointer is
 ; patched on every call so the same logical drive can describe either format.
