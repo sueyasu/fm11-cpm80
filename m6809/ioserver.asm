@@ -107,7 +107,7 @@ ServiceReadCopy
         lbcs    ServiceBad
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra    ServiceDone
 
 ServiceWrite
         lbsr    ValidateDiskRequest
