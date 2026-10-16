@@ -210,11 +210,11 @@ serial_conin:
         ret
 
 local_conin:
-.retry:
+.local_conin_retry:
         ld      a,MBCMD_LOCAL_CONIN
         call    mbox_simple
         or      a
-        jr      nz,.retry
+        jr      nz,.local_conin_retry
         ld      a,(MBOX_DATA)
         and     07Fh
         ret
@@ -237,13 +237,13 @@ serial_conout:
         ret
 
 local_conout:
-.retry:
+.local_conout_retry:
         ld      a,c
         ld      (MBOX_DATA),a
         ld      a,MBCMD_LOCAL_CONOUT
         call    mbox_simple
         or      a
-        jr      nz,.retry
+        jr      nz,.local_conout_retry
         ret
 
 list:
