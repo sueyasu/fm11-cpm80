@@ -767,7 +767,7 @@ MfwDone
         bita    #FDC_WRITEERR
         bne     MfwFailAck
         lda     MINIFDC_IRQ
-        orcc    #$01
+        andcc   #$FE
         rts
 MfwFail
         clr     DMA0_MODE
@@ -816,19 +816,8 @@ StdFdcPrepareSystemTrack
         lda     STDFDC_IRQ
         lda     #FDC_CMD_RESTORE
         sta     STDFDC_STATUS
-        ldx     #$FFFF
-SfpWaitRestore
-        lda     STDFDC_STATUS
-        bita    #FDC_ST_BUSY
-        beq     SfpRestored
-        leax    -1,x
-        cmpx    #0
-        bne     SfpWaitRestore
-        bra     SfpFail
-SfpRestored
-        bita    #FDC_SEEKERR
-        bne     SfpFail
-        lda     STDFDC_IRQ
+        lbsr    StdFdcWaitType1
+        bcs     SfpFail
         lda     #SYSTEM_TRACK
         sta     STDFDC_DATA
         lda     #FDC_CMD_SEEK
@@ -841,7 +830,6 @@ SfpRestored
         andcc   #$FE
         rts
 SfpFail
-        lda     STDFDC_IRQ
         orcc    #$01
         rts
 
@@ -920,7 +908,7 @@ SfwWait
 SfwDone
         clr     DMA1_MODE
         lda     STDFDC_STATUS
-        bita    #FDC_READERR
+        bita    #FDC_WRITEERR
         bne     SfwFailAck
         lda     STDFDC_IRQ
         andcc   #$FE
