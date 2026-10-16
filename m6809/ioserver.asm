@@ -1,8 +1,9 @@
 * FM-11 resident 6809 I/O service.
 *
-* The service is linked at logical $E000 but does not reside in Z80 bank-0
-* RAM.  The IPL loads it at physical $10000 and maps logical $E000-$EFFF to
-* physical $10000-$10FFF through MMR14.
+* The service is linked at logical $D000 with $D000-$EFFF reserved as an
+* 8 KiB resident window.  The IPL currently loads the image at physical
+* $10000 and maps logical $D000-$DFFF to physical $10000-$10FFF; logical
+* $E000-$EFFF is pre-mapped to physical $11000-$11FFF for future growth.
 *
 * A on entry identifies the boot floppy family: 0=2D Mini FDC, 1=2HD
 * Standard FDC.  A:-D: always map to the boot family and E:-H: to the other.
@@ -20,7 +21,7 @@ BOOT_2D         equ    $00
 BOOT_2HD        equ    $01
 SYSTEM_TRACK    equ    1
 
-        org     $E000
+        org     $D000
 
 IoServerStart
         orcc    #$50
@@ -658,24 +659,24 @@ WbrFail
         rts
 
 MapZ80DmaWindow
-        lda     MMR_PAGE_D
-        sta     SavedMmrD
+        lda     MMR_PAGE_C
+        sta     SavedMmrC
         ldy     MBOX_DMA_H
         tfr     y,d
         lsra
         lsra
         lsra
         lsra
-        sta     MMR_PAGE_D
+        sta     MMR_PAGE_C
         tfr     y,d
         anda    #$0F
-        ora     #$D0
+        ora     #$C0
         tfr     d,y
         rts
 
 RestoreZ80Window
-        lda     SavedMmrD
-        sta     MMR_PAGE_D
+        lda     SavedMmrC
+        sta     MMR_PAGE_C
         rts
 
 CopyReadHalfToDma
@@ -695,7 +696,7 @@ CrhLoop
         beq     CrhDone
         cmpy    #Z80_WINDOW_END
         bne     CrhLoop
-        inc     MMR_PAGE_D
+        inc     MMR_PAGE_C
         ldy     #Z80_WINDOW_BASE
         bra     CrhLoop
 CrhDone
@@ -723,7 +724,7 @@ CwhLoop
         beq     CwhDone
         cmpy    #Z80_WINDOW_END
         bne     CwhLoop
-        inc     MMR_PAGE_D
+        inc     MMR_PAGE_C
         ldy     #Z80_WINDOW_BASE
         bra     CwhLoop
 CwhDone
@@ -749,5 +750,5 @@ PhysFdcBase     rmb     2
 PhysDrive       rmb     1
 PhysIs2HD       rmb     1
 WBootDest       rmb     2
-SavedMmrD       rmb     1
+SavedMmrC       rmb     1
 PhysBuf         rmb     256

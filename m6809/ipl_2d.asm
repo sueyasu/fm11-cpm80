@@ -6,10 +6,12 @@
 * 6809 I/O server:
 *
 *   disk $0200-$09FF -> physical $10000-$107FF
-*       resident 6809 I/O server slot (maximum $0800 bytes)
+*       current resident 6809 I/O-server image (maximum $0800 bytes)
 *
-* The I/O server is linked at logical $E000.  Before entering it, MMR14
-* maps logical $E000-$EFFF to physical $10000-$10FFF.  The I/O server then
+* The I/O server is linked at logical $D000.  Before entering it, MMR13
+* maps logical $D000-$DFFF to physical $10000-$10FFF and MMR14 reserves
+* logical $E000-$EFFF for physical $11000-$11FFF so the resident service
+* can grow to 8 KiB without another logical relocation.  The I/O server then
 * performs the first cylinder seek and loads system62.bin from cylinder 1.
 ********************************************************************
 
@@ -31,6 +33,7 @@ FM11_MMR_BASE       equ       $FD80
 FM11_MMR_TASK       equ       $FD90
 FM11_MMR_CTRL       equ       $FD93
 FM11_MMR_ENABLE     equ       $80
+FM11_MMR_PAGE_D     equ       FM11_MMR_BASE+$0D
 FM11_MMR_PAGE_E     equ       FM11_MMR_BASE+$0E
 
 FDC_READSEC         equ       $80
@@ -50,7 +53,7 @@ IOSERVER_FIRSTSEC   equ       3
 
 MBOX_BASE           equ       $FBF6
 MBOX_LEN            equ       10
-IOSERVER_BASE       equ       $E000
+IOSERVER_BASE       equ       $D000
 
 start               bra       main
                     fcb       0,0,0,0,0,0,0,0,0,0,0
@@ -91,7 +94,7 @@ clear_mailbox       sta       ,x+
                     bne       clear_mailbox
 
 * Build an explicit task-0 identity map while translation is disabled,
-* then replace only logical page E with private physical page $10.
+* then reserve two consecutive logical pages for the resident I/O server.
                     lda       >FM11_MMR_CTRL
                     anda      #$7F
                     sta       >FM11_MMR_CTRL
@@ -105,6 +108,8 @@ init_mmr            sta       ,x+
                     blo       init_mmr
 
                     lda       #$10
+                    sta       >FM11_MMR_PAGE_D
+                    lda       #$11
                     sta       >FM11_MMR_PAGE_E
 
                     lda       >FM11_MMR_CTRL

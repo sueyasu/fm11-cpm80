@@ -3,9 +3,9 @@
 *
 * FM-11 ROM IPL loads T0/H0/S1-S4.  The 2HD boot track is the
 * standard IBM-style special track: T0/H0 has 26 x 128-byte sectors.
-* The IPL loads the resident 6809 I/O server from S5-S20 into private
-* physical RAM $10000-$107FF, establishes the private MMR mapping, and
-* enters the I/O server with A=BOOT_2HD.
+* The IPL loads the current resident 6809 I/O-server image from S5-S20
+* into private physical RAM $10000-$107FF, establishes an 8 KiB logical
+* resident window at $D000-$EFFF, and enters the I/O server with A=BOOT_2HD.
 ********************************************************************
 
                     include   "fm11.inc"
@@ -20,7 +20,7 @@ IOSERVER_FIRSTSEC   equ       5
 BOOT_SECTOR_SIZE    equ       128
 
 MBOX_LEN            equ       10
-IOSERVER_BASE       equ       $E000
+IOSERVER_BASE       equ       $D000
 BOOT_2HD            equ       $01
 
 start               bra       main
@@ -62,8 +62,8 @@ clear_mailbox       sta       ,x+
                     cmpu      #0
                     bne       clear_mailbox
 
-* Build task-0 identity mapping while translation is disabled and replace
-* logical page E with private physical page $10.
+* Build task-0 identity mapping while translation is disabled and reserve
+* two consecutive logical pages for the resident I/O server.
                     lda       >MMR_CTRL
                     anda      #$7F
                     sta       >MMR_CTRL
@@ -76,6 +76,8 @@ init_mmr            sta       ,x+
                     cmpa      #16
                     blo       init_mmr
 
+                    lda       #IOSERVER_PAGE_D
+                    sta       >MMR_PAGE_D
                     lda       #IOSERVER_PAGE_E
                     sta       >MMR_PAGE_E
 
