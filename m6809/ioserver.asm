@@ -38,6 +38,18 @@ IoServerStart
         clr     MBOX_STATUS
         clr     LocalKeyValid
         clr     LocalKeyChar
+        clr     AnsiState
+        clr     AnsiParam
+        clr     AnsiPrivate
+        clr     AnsiP1
+        clr     AnsiP2
+        lda     #$07
+        sta     NativeAttr
+        lda     #1
+        sta     CurRow
+        sta     CurCol
+        sta     SaveRow
+        sta     SaveCol
         lbsr    CacheInvalidate
 
         ldx     #TrampolineTemplate
@@ -118,9 +130,6 @@ ServiceWrite
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-
-* Preserve the other 128-byte half.  A cache hit avoids the FDC read that was
-* previously required before every CP/M logical-sector write.
         lbsr    ReadPhysicalCached
         lbcs    ServiceBad
         lbsr    CopyDmaToWriteHalf
@@ -144,19 +153,16 @@ ServiceWriteFail
 ServiceWBoot
         lbsr    WarmBootReload
         lbcs    ServiceBad
-* A successful warm boot proves the boot medium was read again.  Drop any data
-* cache from before the warm boot so a swapped disk cannot reuse old sectors.
         lbsr    CacheInvalidate
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         bra     ServiceDone
 
-* Local console services use the FM-11 Display Sub System protocol proven by
-* the NitrOS-9 fm11console driver.  Output is native FM-11 character output;
-* ANSI/VT100 translation is intentionally left for a later layer.
+* Local console output is parsed as ANSI/VT100 and translated to the native
+* FM-11 Display Sub System controls by ansi_console.inc.
 ServiceLocalOut
         lda     MBOX_DATA
-        lbsr    LocalPutC
+        lbsr    AnsiPutC
         lbcs    ServiceBad
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
@@ -239,9 +245,11 @@ LpcDone
         andcc   #$FE
         puls    b,x,pc
 
+        include "ansi_console.inc"
+
 * Poll INKEY 2 ($2D).  ASCII/control keys are cached for CONST/CONIN.  The
 * confirmed FM-11 extended DEL code $0114 is normalized to ASCII DEL; other
-* extended keys are ignored until the ANSI keyboard-sequence layer is added.
+* extended keys are ignored for now, matching the existing CP/M console path.
 LocalKeyPoll
         tst     LocalKeyValid
         bne     LkpReady
@@ -327,10 +335,6 @@ LkfFail
 ********************************************************************
 * One-track physical-sector cache
 ********************************************************************
-
-* Invalidate both the tag and all per-sector valid bytes.  Cache data itself
-* need not be cleared because it is unreachable until the corresponding valid
-* byte is set again.
 CacheInvalidate
         clr     CacheTagValid
         ldx     #CacheValidMap
@@ -342,8 +346,6 @@ CiLoop
         bne     CiLoop
         rts
 
-* Ensure the current physical drive/controller/track has a cache tag.  A tag
-* change discards the previous track and starts a new lazy-fill cache.
 CachePrepareTrack
         tst     CacheTagValid
         beq     CptReset
@@ -369,9 +371,6 @@ CptReset
         sta     CacheTagValid
         rts
 
-* Return B = physical-sector index within the cached cylinder.
-* 2D:  side 0 = 0..15, side 1 = 16..31
-* 2HD: side 0 = 0..25, side 1 = 26..51
 CacheSectorIndex
         ldb     PhysSector
         decb
@@ -386,9 +385,6 @@ Csi2HD
 CsiDone
         rts
 
-* Map the cache sector selected by B into logical page C.  Each physical 4 KiB
-* page holds sixteen 256-byte sectors, so index>>4 selects the MMR page and
-* index&15 selects the high byte inside $C000-$CFFF.  Returns Y=sector address.
 CacheMapSector
         stb     CacheIndex
         lda     MMR_PAGE_C
@@ -407,7 +403,6 @@ CacheMapSector
         tfr     d,y
         rts
 
-* Copy a cached physical sector into PhysBuf. Carry set means cache miss.
 CacheLoadSector
         lbsr    CachePrepareTrack
         lbsr    CacheSectorIndex
@@ -432,7 +427,6 @@ ClsMiss
         orcc    #$01
         rts
 
-* Copy PhysBuf into the current physical-sector cache slot and mark it valid.
 CacheStoreSector
         lbsr    CachePrepareTrack
         lbsr    CacheSectorIndex
@@ -454,9 +448,6 @@ CssCopy
         andcc   #$FE
         rts
 
-* Return the requested 256-byte physical sector in PhysBuf.  On a cache miss,
-* perform the FDC read and populate the cache.  An FDC failure invalidates the
-* whole tag so a possible media change cannot leave stale sectors reachable.
 ReadPhysicalCached
         lbsr    CacheLoadSector
         bcc     RpcDone
@@ -883,8 +874,6 @@ SfwFailAck
         orcc    #$01
         rts
 
-* Copy a 256-byte Standard-FDC sector from PhysBuf to WBootDest using the
-* existing MMR window copy path.  This avoids consuming another DMA setup path.
 StdFdcReadWBoot
         lbsr    StdFdcReadSector
         bcs     SrwFail
@@ -1092,6 +1081,22 @@ WBootDest       rmb     2
 SavedMmrC       rmb     1
 LocalKeyValid   rmb     1
 LocalKeyChar    rmb     1
+AnsiState       rmb     1
+AnsiParam       rmb     1
+AnsiPrivate     rmb     1
+AnsiP1          rmb     1
+AnsiP2          rmb     1
+CurRow          rmb     1
+CurCol          rmb     1
+SaveRow         rmb     1
+SaveCol         rmb     1
+TmpRow          rmb     1
+TmpCol          rmb     1
+WorkRow         rmb     1
+WorkCol         rmb     1
+LineRow         rmb     1
+LineCol         rmb     1
+NativeAttr      rmb     1
 CacheTagValid   rmb     1
 CacheDrive      rmb     1
 CacheTrack      rmb     1
