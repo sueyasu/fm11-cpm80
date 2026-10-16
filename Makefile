@@ -43,7 +43,7 @@ ioserver: $(M6809_BUILD)/ioserver.bin
 
 $(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm include/6809/fm11.inc | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
-	$(PYTHON) tools/check_binary.py $@ --max-size 0x800 --name "6809 I/O server disk slot (logical E000-E7FF, physical 10000-107FF)"
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x1000 --name "6809 I/O server disk slot (logical D000-DFFF, physical 10000-10FFF)"
 
 ipl: $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/ipl_2hd.bin
 

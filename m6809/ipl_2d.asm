@@ -5,14 +5,14 @@
 * to $0400.  The IPL stays on cylinder 0 and loads only the resident
 * 6809 I/O server:
 *
-*   disk $0200-$09FF -> physical $10000-$107FF
-*       current resident 6809 I/O-server image (maximum $0800 bytes)
+*   disk $0200-$11FF -> physical $10000-$10FFF
+*       current resident 6809 I/O-server image (maximum $1000 bytes)
 *
-* The I/O server is linked at logical $D000.  Before entering it, MMR13
-* maps logical $D000-$DFFF to physical $10000-$10FFF and MMR14 reserves
-* logical $E000-$EFFF for physical $11000-$11FFF so the resident service
-* can grow to 8 KiB without another logical relocation.  The I/O server then
-* performs the first cylinder seek and loads system62.bin from cylinder 1.
+* The first 14 sectors come from T0/H0/S3-S16 and the final two from
+* T0/H1/S1-S2.  The I/O server is linked at logical $D000.  Before
+* entering it, MMR13 maps logical $D000-$DFFF to physical $10000-$10FFF
+* and MMR14 reserves logical $E000-$EFFF for physical $11000-$11FFF so
+* the resident service can grow to 8 KiB without another relocation.
 ********************************************************************
 
                     org       $0400
@@ -48,7 +48,7 @@ DMA_READ_MODE       equ       DMA_DIR_READ+DMA_ENABLE
 STAGE1_STACK        equ       $2000
 IOSERVER_DMA_ADDR   equ       $0000      * physical $10000, bank=1
 IOSERVER_DMA_BANK   equ       $01
-IOSERVER_SECTORS    equ       8
+IOSERVER_SECTORS    equ       16         * 16 x 256 = $1000
 IOSERVER_FIRSTSEC   equ       3
 
 MBOX_BASE           equ       $FBF6
@@ -61,7 +61,8 @@ start               bra       main
 main                orcc      #$50
                     lds       #STAGE1_STACK
 
-* Boot from 2D drive 0.  Stay entirely on T0/H0 after the ROM-loaded S1-S2.
+* Boot from 2D drive 0.  The first 14 I/O-server sectors are the remainder
+* of T0/H0 after the ROM-loaded IPL; then continue at T0/H1/S1.
                     clr       >FM11_FDC_DRIVE
                     clr       >FM11_DMA0_MODE
                     lda       #IOSERVER_DMA_BANK
@@ -77,7 +78,18 @@ load_ioserver       lbsr      read_sector_dma
                     leay      -1,y
                     cmpy      #0
                     beq       load_done
-                    inc       >FM11_FDC_SECTOR
+
+                    lda       >FM11_FDC_SIDE
+                    bne       load_next_sector
+                    lda       >FM11_FDC_SECTOR
+                    cmpa      #16
+                    blo       load_next_sector
+                    lda       #1
+                    sta       >FM11_FDC_SIDE
+                    sta       >FM11_FDC_SECTOR
+                    bra       load_ioserver
+
+load_next_sector    inc       >FM11_FDC_SECTOR
                     bra       load_ioserver
 
 load_done

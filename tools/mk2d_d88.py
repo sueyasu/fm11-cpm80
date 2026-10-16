@@ -14,7 +14,7 @@ SYSTEM_SIZE = SYSTEM_CYLINDERS * HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 CYLINDER_SIZE = HEADS * SECTORS_PER_SIDE * SECTOR_SIZE
 IPL_SIZE = 0x0200
 IOSERVER_OFFSET = IPL_SIZE
-IOSERVER_SLOT_SIZE = 0x0800
+IOSERVER_SLOT_SIZE = 0x1000
 CPM_SYSTEM_OFFSET = CYLINDER_SIZE
 CPM_SYSTEM_SIZE = 0x1A00
 
@@ -151,7 +151,7 @@ def make_raw(ipl: bytes, system: bytes, ioserver: bytes, files):
     # OFF=2 reserves cylinders 0 and 1 as a 16 KiB system area.
     # Cylinder 0 is exclusively the 6809 boot environment:
     #   $0000-$01FF  ROM-loaded IPL
-    #   $0200-$09FF  resident I/O-server slot (up to $0800 bytes)
+    #   $0200-$11FF  resident I/O-server slot (up to $1000 bytes)
     # Cylinder 1 contains the single CP/M system image:
     #   $2000-$39FF  system62.bin -> Z80 physical $DC00-$F5FF
     # The IPL never seeks away from cylinder 0; the resident I/O server loads

@@ -17,8 +17,7 @@ RAW_SIZE = BOOT_TRACK_BYTES + (CYLINDERS * HEADS - 1) * NORMAL_TRACK_BYTES
 
 IPL_SECTORS = 4
 IPL_SIZE = IPL_SECTORS * BOOT_SECTOR_SIZE
-IOSERVER_SECTORS = 16
-IOSERVER_SIZE = IOSERVER_SECTORS * BOOT_SECTOR_SIZE
+IOSERVER_SIZE = 0x1000
 IOSERVER_OFFSET = IPL_SIZE
 
 # T1/H0 begins after T0/H0 (128-byte sectors) and T0/H1 (256-byte sectors).
@@ -150,6 +149,9 @@ def make_raw(ipl: bytes, system: bytes, ioserver: bytes, files):
 
     # Reserved cylinders 0-1.  The exact mixed-density byte stream is kept in
     # the raw image so D88 conversion can preserve 128-byte T0/H0 sectors.
+    # I/O server occupies a contiguous 4 KiB raw slot immediately after the
+    # 512-byte IPL.  This spans T0/H0/S5-S26 (22 x 128 = 0x0b00) and
+    # T0/H1/S1-S5 (5 x 256 = 0x0500).
     raw[:DATA_OFFSET] = b"\x00" * DATA_OFFSET
     raw[0:IPL_SIZE] = fit(ipl, IPL_SIZE, "2HD IPL")
     raw[IOSERVER_OFFSET:IOSERVER_OFFSET + IOSERVER_SIZE] = fit(
@@ -244,7 +246,8 @@ def main():
     print(f"{args.output}: {len(d88)} bytes, {len(files)} command file(s)")
     print("boot track: T0/H0 = 26 x 128-byte single-density sectors")
     print("  S1-S4  : 2HD IPL")
-    print("  S5-S20 : resident 6809 I/O server")
+    print("  S5-S26 : resident 6809 I/O server, first 0x0b00 bytes")
+    print("  T0/H1/S1-S5: resident 6809 I/O server, final 0x0500 bytes")
     print("system: T1/H0/S1-S26 = system62.bin")
     print(f"directory: raw 0x{DATA_OFFSET:04x}-0x{DATA_OFFSET + DIR_SIZE - 1:04x}")
     for path in files:
