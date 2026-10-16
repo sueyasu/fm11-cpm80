@@ -295,7 +295,7 @@ LkfWaitReady
         leax    -1,x
         cmpx    #0
         bne     LkfWaitReady
-        bra     LkfFail
+        lbra    LkfFail
 LkfHalt
         lda     #SUB_HALT
         sta     >CPUCTL
