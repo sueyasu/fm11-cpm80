@@ -38,6 +38,9 @@ IoServerStart
         clr     MBOX_STATUS
         clr     LocalKeyValid
         clr     LocalKeyChar
+        clr     LocalKeySeqCount
+        clr     LocalKeySeq1
+        clr     LocalKeySeq2
         clr     AnsiState
         clr     AnsiParam
         clr     AnsiPrivate
@@ -247,12 +250,25 @@ LpcDone
 
         include "ansi_console.inc"
 
-* Poll INKEY 2 ($2D).  ASCII/control keys are cached for CONST/CONIN.  The
-* confirmed FM-11 extended DEL code $0114 is normalized to ASCII DEL; other
-* extended keys are ignored for now, matching the existing CP/M console path.
+* Poll INKEY 2 ($2D).  ASCII/control keys are cached for CONST/CONIN.
+* FM-11 extended DEL ($0114) is normalized to ASCII DEL.  The confirmed
+* cursor keys ($0116-$0119) are exposed as ANSI/VT100 ESC [ A/B/C/D input
+* sequences so local-console applications see the same keys as a terminal.
 LocalKeyPoll
         tst     LocalKeyValid
         bne     LkpReady
+        tst     LocalKeySeqCount
+        beq     LkpFetch
+        lda     LocalKeySeq1
+        sta     LocalKeyChar
+        lda     LocalKeySeq2
+        sta     LocalKeySeq1
+        clr     LocalKeySeq2
+        dec     LocalKeySeqCount
+        lda     #1
+        sta     LocalKeyValid
+        bra     LkpReady
+LkpFetch
         lbsr    LocalKeyFetch
         bcs     LkpFail
         tsta
@@ -315,8 +331,38 @@ LkfResult
         bne     LkfNoKey
         lda     >FM11_SUB_SHARED+4
         cmpa    #$14
-        bne     LkfNoKey
+        beq     LkfDelete
+        cmpa    #$16
+        beq     LkfUp
+        cmpa    #$17
+        beq     LkfDown
+        cmpa    #$18
+        beq     LkfLeft
+        cmpa    #$19
+        beq     LkfRight
+        bra     LkfNoKey
+LkfDelete
         lda     #$7F
+        andcc   #$FE
+        puls    b,x,pc
+LkfUp
+        ldb     #'A
+        bra     LkfCursor
+LkfDown
+        ldb     #'B
+        bra     LkfCursor
+LkfRight
+        ldb     #'C
+        bra     LkfCursor
+LkfLeft
+        ldb     #'D
+LkfCursor
+        lda     #'[
+        sta     LocalKeySeq1
+        stb     LocalKeySeq2
+        lda     #2
+        sta     LocalKeySeqCount
+        lda     #$1B
         andcc   #$FE
         puls    b,x,pc
 LkfAscii
@@ -721,7 +767,7 @@ MfwDone
         bita    #FDC_WRITEERR
         bne     MfwFailAck
         lda     MINIFDC_IRQ
-        andcc   #$FE
+        orcc    #$01
         rts
 MfwFail
         clr     DMA0_MODE
@@ -770,8 +816,19 @@ StdFdcPrepareSystemTrack
         lda     STDFDC_IRQ
         lda     #FDC_CMD_RESTORE
         sta     STDFDC_STATUS
-        lbsr    StdFdcWaitType1
-        bcs     SfpFail
+        ldx     #$FFFF
+SfpWaitRestore
+        lda     STDFDC_STATUS
+        bita    #FDC_ST_BUSY
+        beq     SfpRestored
+        leax    -1,x
+        cmpx    #0
+        bne     SfpWaitRestore
+        bra     SfpFail
+SfpRestored
+        bita    #FDC_SEEKERR
+        bne     SfpFail
+        lda     STDFDC_IRQ
         lda     #SYSTEM_TRACK
         sta     STDFDC_DATA
         lda     #FDC_CMD_SEEK
@@ -784,6 +841,7 @@ StdFdcPrepareSystemTrack
         andcc   #$FE
         rts
 SfpFail
+        lda     STDFDC_IRQ
         orcc    #$01
         rts
 
@@ -862,7 +920,7 @@ SfwWait
 SfwDone
         clr     DMA1_MODE
         lda     STDFDC_STATUS
-        bita    #FDC_WRITEERR
+        bita    #FDC_READERR
         bne     SfwFailAck
         lda     STDFDC_IRQ
         andcc   #$FE
@@ -1081,6 +1139,9 @@ WBootDest       rmb     2
 SavedMmrC       rmb     1
 LocalKeyValid   rmb     1
 LocalKeyChar    rmb     1
+LocalKeySeqCount rmb    1
+LocalKeySeq1    rmb     1
+LocalKeySeq2    rmb     1
 AnsiState       rmb     1
 AnsiParam       rmb     1
 AnsiPrivate     rmb     1
