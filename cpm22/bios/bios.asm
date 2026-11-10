@@ -67,6 +67,11 @@ ALV7:           equ     ALV6+31
 ; ----------------------------------------------------------------------
 
 boot:
+        ; Z80 reset leaves SP undefined (zero in the emulator).  The
+        ; first CALL must not push its return address into FC00h-FFFFh,
+        ; which is the I/O aperture, not RAM.  Use the same reserved
+        ; boot stack as WBOOT, immediately below the disk workspace.
+        ld      sp,0F960h
         xor     a
         ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
         inc     a
