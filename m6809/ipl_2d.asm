@@ -79,7 +79,11 @@ load_ioserver       lbsr      read_sector_dma
                     cmpy      #0
                     beq       load_done
 
+* FD1C also reports FDC completion in bit 6.  Examine only
+* the side-select latch (bit 0), or the read of sector 16 on
+* head 0 incorrectly advances to nonexistent sector 17.
                     lda       >FM11_FDC_SIDE
+                    bita      #$01
                     bne       load_next_sector
                     lda       >FM11_FDC_SECTOR
                     cmpa      #16
