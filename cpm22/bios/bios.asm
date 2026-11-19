@@ -79,6 +79,7 @@ boot:
         xor     a
         ld      (0004h),a       ; current disk/user = user 0, A:
         ld      (curdrv),a
+        ld      (uc1_next),a
         ld      hl,0080h
         ld      (curdma),hl
         call    serial_init     ; keep TTY ready for STAT CON:=TTY:
@@ -196,7 +197,7 @@ setvec:
 ;
 ; CP/M IOBYTE bits 0-1 select CON:. CRT (01) is the default and selects the
 ; FM-11 local screen/keyboard through the resident 6809 I/O server. TTY (00)
-; remains the direct Z80 8251 serial console. BAT and UC1 fall back to TTY.
+; remains the direct Z80 8251 serial console. BAT falls back to TTY; UC1 polls both inputs and mirrors output.
 ; LIST/PUNCH/READER stay on the serial device and do not follow CON:.
 ; ----------------------------------------------------------------------
 
@@ -217,7 +218,12 @@ const:
         ld      a,(0003h)
         and     03h
         cp      01h
-        jr      z,local_const
+        jp      z,local_const
+        cp      03h
+        jr      nz,serial_const
+        call    local_const
+        or      a
+        ret     nz
 
 serial_const:
         ld      a,(FM11_SER_STAT)
@@ -241,7 +247,9 @@ conin:
         ld      a,(0003h)
         and     03h
         cp      01h
-        jr      z,local_conin
+        jp      z,local_conin
+        cp      03h
+        jp      z,shared_conin
 
 serial_conin:
 .conin_wait:
@@ -262,11 +270,43 @@ local_conin:
         and     07Fh
         ret
 
+shared_conin:
+        push    bc
+.shared_wait:
+        call    local_const
+        ld      b,a
+        call    serial_const
+        or      a
+        jr      z,.no_serial
+        ld      a,b
+        or      a
+        jr      z,.serial
+        ld      a,(uc1_next)
+        or      a
+        jr      nz,.serial
+.local:
+        ld      a,1
+        ld      (uc1_next),a
+        pop     bc
+        jp      local_conin
+.no_serial:
+        ld      a,b
+        or      a
+        jr      z,.shared_wait
+        jr      .local
+.serial:
+        xor     a
+        ld      (uc1_next),a
+        pop     bc
+        jp      serial_conin
+
 conout:
         ld      a,(0003h)
         and     03h
         cp      01h
-        jr      z,local_conout
+        jp      z,local_conout
+        cp      03h
+        jr      z,shared_conout
 
 serial_conout:
         push    af
@@ -279,6 +319,26 @@ serial_conout:
         ld      (FM11_SER_DATA),a
         ret
 
+shared_conout:
+        call    local_conout
+        push    hl
+        ld      hl,0FFFFh
+.mirror_wait:
+        ld      a,(FM11_SER_STAT)
+        and     I8251_TXRDY
+        jr      nz,.mirror_ready
+        dec     hl
+        ld      a,h
+        or      l
+        jr      nz,.mirror_wait
+        pop     hl
+        ret
+.mirror_ready:
+        ld      a,c
+        ld      (FM11_SER_DATA),a
+        pop     hl
+        ret
+
 local_conout:
 .local_conout_retry:
         ld      a,c
@@ -286,7 +346,7 @@ local_conout:
         ld      a,MBCMD_LOCAL_CONOUT
         call    mbox_simple
         or      a
-        jr      nz,.local_conout_retry
+        ; Do not replay a partially transmitted native escape.
         ret
 
 list:
@@ -299,6 +359,9 @@ reader:
         jp      serial_conin
 
 listst:
+        ld      a,(FM11_SER_STAT)
+        and     I8251_TXRDY
+        ret     z
         ld      a,0FFh
         ret
 
@@ -503,6 +566,8 @@ cursec:
 curdma:
         dw      0080h
 wbootinfo:
+        db      0
+uc1_next:
         db      0
 
         end

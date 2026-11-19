@@ -27,11 +27,14 @@ SYSTEM_TRACK    equ    1
 * logical page C.  Sectors are filled lazily and writes remain write-through.
 CACHE_PAGE_BASE equ    $12
 CACHE_MAX_SECTORS equ  52
+* Private E000-EFFF maps to physical 11000-11FFF; never use CP/M TPA.
+IOSERVER_STACK_TOP equ $F000
 
         org     $D000
 
 IoServerStart
         orcc    #$50
+        lds     #IOSERVER_STACK_TOP
         anda    #$01
         sta     BOOTTYPE
         clr     MBOX_CMD
@@ -94,9 +97,9 @@ ServiceLoop
         ldb     MBOX_CMD
         lbeq    ServiceDone
         cmpb    #MBCMD_READ
-        beq     ServiceRead
+        lbeq     ServiceRead
         cmpb    #MBCMD_WRITE
-        beq     ServiceWrite
+        lbeq     ServiceWrite
         cmpb    #MBCMD_WBOOT
         lbeq    ServiceWBoot
         cmpb    #MBCMD_LOCAL_CONST
@@ -118,7 +121,7 @@ ServiceRead
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-        lbsr    ReadPhysicalCached
+        lbsr    ReadPhysical
         lbcs    ServiceBad
         lbsr    CopyReadHalfToDma
         lbcs    ServiceBad
@@ -133,22 +136,24 @@ ServiceWrite
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
-        lbsr    ReadPhysicalCached
+        lbsr    ReadPhysical
         lbcs    ServiceBad
         lbsr    CopyDmaToWriteHalf
         lbcs    ServiceBad
         lda     PhysIs2HD
-        bne     ServiceWrite2HD
+        lbne     ServiceWrite2HD
         lbsr    MiniFdcWriteSector
-        bra     ServiceWriteCommit
+        lbra     ServiceWriteCommit
 ServiceWrite2HD
         lbsr    StdFdcWriteSector
 ServiceWriteCommit
-        bcs     ServiceWriteFail
+        lbcs     ServiceWriteFail
+        ifdef   FLOPPY_CACHE
         lbsr    CacheStoreSector
+        endc
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra     ServiceDone
 ServiceWriteFail
         lbsr    CacheInvalidate
         lbra    ServiceBad
@@ -157,19 +162,26 @@ ServiceWBoot
         lbsr    WarmBootReload
         lbcs    ServiceBad
         lbsr    CacheInvalidate
+        ifdef   FLOPPY_CACHE
+        clr     AnsiState
+        clr     AnsiParam
+        clr     AnsiPrivate
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra     ServiceDone
 
 * Local console output is parsed as ANSI/VT100 and translated to the native
 * FM-11 Display Sub System controls by ansi_console.inc.
 ServiceLocalOut
         lda     MBOX_DATA
         lbsr    AnsiPutC
-        lbcs    ServiceBad
+        lbcc     ServiceLocalOutOk
+        clr     AnsiState
+        lbra    ServiceBad
+ServiceLocalOutOk
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra     ServiceDone
 
 ServiceLocalConst
         lbsr    LocalKeyPoll
@@ -184,7 +196,7 @@ SlcStore
         sta     MBOX_DATA
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
-        bra     ServiceDone
+        lbra     ServiceDone
 
 ServiceLocalIn
 SliWait
@@ -513,6 +525,21 @@ RpcFail
         lbsr    CacheInvalidate
         orcc    #$01
         rts
+
+        else
+        rts
+        endc
+
+ReadPhysical
+        ifdef   FLOPPY_CACHE
+        lbra    ReadPhysicalCached
+        else
+        lda     PhysIs2HD
+        bne     ReadPhysical2HD
+        lbra    MiniFdcReadSector
+ReadPhysical2HD
+        lbra    StdFdcReadSector
+        endc
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -1135,6 +1162,7 @@ AnsiParam       rmb     1
 AnsiPrivate     rmb     1
 AnsiP1          rmb     1
 AnsiP2          rmb     1
+                rmb     6       * eight contiguous CSI parameters
 CurRow          rmb     1
 CurCol          rmb     1
 SaveRow         rmb     1
@@ -1146,10 +1174,12 @@ WorkCol         rmb     1
 LineRow         rmb     1
 LineCol         rmb     1
 NativeAttr      rmb     1
+        ifdef   FLOPPY_CACHE
 CacheTagValid   rmb     1
 CacheDrive      rmb     1
 CacheTrack      rmb     1
 CacheIs2HD      rmb     1
 CacheIndex      rmb     1
 CacheValidMap   rmb     CACHE_MAX_SECTORS
+        endc
 PhysBuf         rmb     256

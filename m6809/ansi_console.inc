@@ -22,6 +22,7 @@ ANSI_ESC        equ     $1B
 ANSI_NORMAL     equ     0
 ANSI_ESCSTATE   equ     1
 ANSI_CSI        equ     2
+ANSI_MAX_PARAMS equ     8
 SCR_COLS        equ     80
 SCR_ROWS        equ     25
 
@@ -39,14 +40,14 @@ C_SPACE         equ     $20
 
 AnsiPutC
         ldb     AnsiState
-        beq     APNormal
+        lbeq     APNormal
         cmpb    #ANSI_ESCSTATE
-        beq     APEsc
+        lbeq     APEsc
         lbra    APCsi
 
 APNormal
         cmpa    #ANSI_ESC
-        bne     APOrdinary
+        lbne     APOrdinary
         lda     #ANSI_ESCSTATE
         sta     AnsiState
         andcc   #$FE
@@ -54,6 +55,7 @@ APNormal
 
 APOrdinary
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         rts
 
 APEscapeReset
@@ -63,33 +65,35 @@ APEscapeReset
 
 APEsc
         cmpa    #'[
-        beq     APStartCsi
+        lbeq     APStartCsi
         cmpa    #'7
-        beq     APSave
+        lbeq     APSave
         cmpa    #'8
-        beq     APRestore
+        lbeq     APRestore
         cmpa    #'c
-        beq     APResetTerm
+        lbeq     APResetTerm
         cmpa    #'D
-        beq     APIndex
+        lbeq     APIndex
         cmpa    #'M
-        beq     APReverseIndex
+        lbeq     APReverseIndex
         cmpa    #'E
-        beq     APNextLine
+        lbeq     APNextLine
         cmpa    #'T
-        beq     APNativeEsc
+        lbeq     APNativeEsc
         cmpa    #'Y
-        beq     APNativeEsc
+        lbeq     APNativeEsc
         cmpa    #'*
-        beq     APNativeEsc
-        bra     APEscapeReset
+        lbeq     APNativeEsc
+        lbra     APEscapeReset
 
 APNativeEsc
         pshs    a
         lda     #ANSI_ESC
         lbsr    LocalPutC
         puls    a
+        lbcs    AnsiReturnError
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         clr     AnsiState
         andcc   #$FE
         rts
@@ -99,8 +103,12 @@ APStartCsi
         sta     AnsiState
         clr     AnsiParam
         clr     AnsiPrivate
-        clr     AnsiP1
-        clr     AnsiP2
+        ldx     #AnsiP1
+        ldb     #ANSI_MAX_PARAMS
+APClearParams
+        clr     ,x+
+        decb
+        lbne     APClearParams
         andcc   #$FE
         rts
 
@@ -109,80 +117,103 @@ APSave
         sta     SaveRow
         lda     CurCol
         sta     SaveCol
-        bra     APEscapeReset
+        lbra     APEscapeReset
 
 APRestore
         lda     SaveRow
         ldb     SaveCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         clr     AnsiState
         rts
 
 APResetTerm
-        lbsr    AnsiClearHome
         clr     AnsiState
+        lda     #7
+        sta     NativeAttr
+        lbsr    ApplyNativeAttr
+        lbcs    AnsiReturnError
+        lbsr    AnsiClearHome
+        lbcs    AnsiReturnError
+        lda     #1
+        sta     SaveRow
+        sta     SaveCol
+        andcc   #$FE
         rts
 
 APIndex
         lda     #C_DWN
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         clr     AnsiState
         rts
 
 APReverseIndex
         lda     #C_UP
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         clr     AnsiState
         rts
 
 APNextLine
         lda     #C_DWN
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         lda     #C_CR
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         clr     AnsiState
         rts
 
 APCsi
         cmpa    #'0
-        blo     APCsiNotDigit
+        lblo     APCsiNotDigit
         cmpa    #'9
-        bhi     APCsiNotDigit
+        lbhi     APCsiNotDigit
+        ldb     AnsiParam
+        cmpb    #ANSI_MAX_PARAMS
+        lbhs     APCsiIgnore
         suba    #'0
         pshs    a
-        tst     AnsiParam
-        bne     APCsiDigit2
+        ldx     #AnsiP1
+        abx
         lda     #10
-        ldb     AnsiP1
+        ldb     ,x
         mul
         addb    ,s+
-        stb     AnsiP1
-        andcc   #$FE
-        rts
-APCsiDigit2
-        lda     #10
-        ldb     AnsiP2
-        mul
-        addb    ,s+
-        stb     AnsiP2
+        adca    #0
+        tsta
+        lbeq     APCsiStore
+        ldb     #255
+APCsiStore
+        stb     ,x
+APCsiIgnore
         andcc   #$FE
         rts
 
 APCsiNotDigit
         cmpa    #';
-        bne     APCsiPrivate
-        lda     #1
-        sta     AnsiParam
-        andcc   #$FE
-        rts
-
+        lbne     APCsiPrivate
+        lda     AnsiParam
+        cmpa    #ANSI_MAX_PARAMS
+        lbhs     APCsiIgnore
+        inc     AnsiParam
+        lbra     APCsiIgnore
 APCsiPrivate
         cmpa    #'?
-        bne     APCsiFinal
-        lda     #1
-        sta     AnsiPrivate
-        andcc   #$FE
-        rts
+        lbne     APCsiDispatch
+        inc     AnsiPrivate
+        lbra     APCsiIgnore
+APCsiDispatch
+        cmpa    #$40
+        lblo     APCsiIgnore
+        cmpa    #$7E
+        lbhi    APEscapeReset
+        ldb     AnsiParam
+        cmpb    #ANSI_MAX_PARAMS
+        lbhs    APEscapeReset
+        tst     AnsiPrivate
+        lbne    APEscapeReset
 
 APCsiFinal
         pshs    a
@@ -229,7 +260,7 @@ APCsiFinal
 
 APGetCount
         ldb     AnsiP1
-        bne     APCountOk
+        lbne     APCountOk
         ldb     #1
 APCountOk
         rts
@@ -238,11 +269,12 @@ APCursorUp
         lbsr    APGetCount
 APCUlp
         cmpb    #0
-        beq     APCUDone
+        lbeq     APCUDone
         lda     #C_UP
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCUlp
+        lbra     APCUlp
 APCUDone
         andcc   #$FE
         rts
@@ -251,100 +283,112 @@ APCursorDown
         lbsr    APGetCount
 APCDlp
         cmpb    #0
-        beq     APCUDone
+        lbeq     APCUDone
         lda     #C_DWN
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCDlp
+        lbra     APCDlp
 
 APCursorRight
         lbsr    APGetCount
 APCRlp
         cmpb    #0
-        beq     APCUDone
+        lbeq     APCUDone
         lda     #C_RGT
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCRlp
+        lbra     APCRlp
 
 APCursorLeft
         lbsr    APGetCount
 APCLlp
         cmpb    #0
-        beq     APCUDone
+        lbeq     APCUDone
         lda     #C_LFT
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCLlp
+        lbra     APCLlp
 
 APCursorNextLine
         lbsr    APGetCount
 APCNLoop
         cmpb    #0
-        beq     APCNCR
+        lbeq     APCNCR
         lda     #C_DWN
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCNLoop
+        lbra     APCNLoop
 APCNCR
         lda     #C_CR
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         rts
 
 APCursorPrevLine
         lbsr    APGetCount
 APCPLoop
         cmpb    #0
-        beq     APCPCR
+        lbeq     APCPCR
         lda     #C_UP
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         decb
-        bra     APCPLoop
+        lbra     APCPLoop
 APCPCR
         lda     #C_CR
         lbsr    RawPutCTracked
+        lbcs    AnsiReturnError
         rts
 
 APCursorPos
         lda     AnsiP1
-        bne     APCPRowOk
+        lbne     APCPRowOk
         lda     #1
 APCPRowOk
         ldb     AnsiP2
-        bne     APCPColOk
+        lbne     APCPColOk
         ldb     #1
 APCPColOk
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 APAbsCol
         lda     CurRow
         ldb     AnsiP1
-        bne     APACOk
+        lbne     APACOk
         ldb     #1
 APACOk
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 APAbsRow
         lda     AnsiP1
-        bne     APAROk
+        lbne     APAROk
         lda     #1
 APAROk
         ldb     CurCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 APEraseDisplay
         ldb     AnsiP1
         cmpb    #2
-        beq     APEDAll
+        lbeq     APEDAll
         cmpb    #1
-        beq     APEDStart
+        lbeq     APEDStart
         lbsr    AnsiEraseToEnd
+        lbcs    AnsiReturnError
         rts
 APEDStart
         lbsr    AnsiEraseFromStart
+        lbcs    AnsiReturnError
         rts
 APEDAll
         lda     CurRow
@@ -352,62 +396,67 @@ APEDAll
         lda     CurCol
         sta     WorkCol
         lbsr    NativeEraseAll
+        lbcs    AnsiReturnError
         lda     WorkRow
         ldb     WorkCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 APEraseLine
         ldb     AnsiP1
         lbsr    AnsiEraseLine
+        lbcs    AnsiReturnError
         rts
 
 APEraseChars
         lbsr    APGetCount
         lbsr    AnsiEraseChars
+        lbcs    AnsiReturnError
         rts
 
 APSgr
-        lda     AnsiP1
+        ldy     #AnsiP1
+        ldb     AnsiParam
+        incb
+        pshs    b
+APSgrNext
+        lda     ,y+
         lbsr    ApplySgrParam
-        tst     AnsiParam
-        beq     APSgrApply
-        lda     AnsiP2
-        lbsr    ApplySgrParam
-APSgrApply
-        lbsr    ApplyNativeAttr
-        andcc   #$FE
-        rts
+        dec     ,s
+        lbne     APSgrNext
+        leas    1,s
+        lbra    ApplyNativeAttr
 
 ApplySgrParam
         cmpa    #0
-        beq     ASPReset
+        lbeq     ASPReset
         cmpa    #1
-        beq     ASPBold
+        lbeq     ASPBold
         cmpa    #5
-        beq     ASPBlink
+        lbeq     ASPBlink
         cmpa    #7
-        beq     ASPReverse
+        lbeq     ASPReverse
         cmpa    #22
-        beq     ASPBoldOff
+        lbeq     ASPBoldOff
         cmpa    #25
-        beq     ASPBlinkOff
+        lbeq     ASPBlinkOff
         cmpa    #27
-        beq     ASPReverseOff
+        lbeq     ASPReverseOff
         cmpa    #39
-        beq     ASPDefaultColor
+        lbeq     ASPDefaultColor
         cmpa    #30
-        blo     ASPBrightCheck
+        lblo     ASPBrightCheck
         cmpa    #37
-        bhi     ASPBrightCheck
+        lbhi     ASPBrightCheck
         suba    #30
         lbsr    ASPSetColor
         rts
 ASPBrightCheck
         cmpa    #90
-        blo     ASPDone
+        lblo     ASPDone
         cmpa    #97
-        bhi     ASPDone
+        lbhi     ASPDone
         suba    #90
         lbsr    ASPSetColor
         ldb     NativeAttr
@@ -468,10 +517,13 @@ ASPSetColor
 ApplyNativeAttr
         lda     #ANSI_ESC
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #'G
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     NativeAttr
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         rts
 
 AnsiColorMap
@@ -489,6 +541,7 @@ APCsiRestore
         lda     SaveRow
         ldb     SaveCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 * NitrOS-9 accepts CSI ? 25 h/l as a no-op because cursor visibility is not
@@ -500,31 +553,34 @@ APCsiMode
 
 AnsiGoto
         cmpa    #1
-        bhs     AGRowLowOk
+        lbhs     AGRowLowOk
         lda     #1
 AGRowLowOk
         cmpa    #SCR_ROWS
-        bls     AGRowOk
+        lbls     AGRowOk
         lda     #SCR_ROWS
 AGRowOk
         cmpb    #1
-        bhs     AGColLowOk
+        lbhs     AGColLowOk
         ldb     #1
 AGColLowOk
         cmpb    #SCR_COLS
-        bls     AGColOk
+        lbls     AGColOk
         ldb     #SCR_COLS
 AGColOk
         sta     TmpRow
         stb     TmpCol
         lda     #$12
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     TmpCol
         deca
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     TmpRow
         deca
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     TmpRow
         sta     CurRow
         lda     TmpCol
@@ -535,8 +591,10 @@ AGColOk
 AnsiClearHome
         lda     #C_CLSALL
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #C_HOME
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #1
         sta     CurRow
         sta     CurCol
@@ -549,27 +607,33 @@ AnsiEraseLine
         lda     CurCol
         sta     LineCol
         cmpb    #1
-        beq     AELStart
+        lbeq     AELStart
         cmpb    #2
-        beq     AELAll
+        lbeq     AELAll
         lbsr    NativeEraseEOL
+        lbcs    AnsiReturnError
         rts
 AELStart
         lda     LineRow
         ldb     #1
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         ldb     LineCol
         lbsr    EraseCells
-        bra     AELRestore
+        lbcs    AnsiReturnError
+        lbra     AELRestore
 AELAll
         lda     LineRow
         ldb     #1
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         lbsr    NativeEraseEOL
+        lbcs    AnsiReturnError
 AELRestore
         lda     LineRow
         ldb     LineCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 AnsiEraseChars
@@ -578,35 +642,40 @@ AnsiEraseChars
         lda     CurCol
         sta     LineCol
         lbsr    EraseCells
+        lbcs    AnsiReturnError
         lda     LineRow
         ldb     LineCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 EraseCells
         cmpb    #0
-        beq     ECDone
+        lbeq     ECDone
         lda     #SCR_COLS+1
         suba    CurCol
         sta     TmpCol
         cmpb    TmpCol
-        bhs     ECToEOL
+        lbhs     ECToEOL
 ECSpaces
         cmpb    #0
-        beq     ECDone
+        lbeq     ECDone
         pshs    b
         lda     #C_SPACE
         lbsr    LocalPutC
         puls    b
+        lbcs    AnsiReturnError
         decb
-        bra     ECSpaces
+        lbra     ECSpaces
 ECToEOL
         lbsr    NativeEraseEOL
+        lbcs    AnsiReturnError
 ECDone
         rts
 
 AnsiEraseToEnd
         lbsr    NativeEraseEOS
+        lbcs    AnsiReturnError
         rts
 
 AnsiEraseFromStart
@@ -617,131 +686,161 @@ AnsiEraseFromStart
         lda     #1
 AEFSRow
         cmpa    WorkRow
-        bhs     AEFSCurrent
+        lbhs     AEFSCurrent
         sta     TmpRow
         ldb     #1
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         ldb     #2
         lbsr    AnsiEraseLine
+        lbcs    AnsiReturnError
         lda     TmpRow
         inca
-        bra     AEFSRow
+        lbra     AEFSRow
 AEFSCurrent
         lda     WorkRow
         ldb     WorkCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         ldb     #1
         lbsr    AnsiEraseLine
+        lbcs    AnsiReturnError
         lda     WorkRow
         ldb     WorkCol
         lbsr    AnsiGoto
+        lbcs    AnsiReturnError
         rts
 
 NativeEraseEOL
         lda     #ANSI_ESC
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #'T
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         rts
 
 NativeEraseEOS
         lda     #ANSI_ESC
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #'Y
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         rts
 
 NativeEraseAll
         lda     #ANSI_ESC
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         lda     #'*
         lbsr    LocalPutC
+        lbcs    AnsiReturnError
         rts
 
 RawPutCTracked
         pshs    a
         lbsr    LocalPutC
         puls    a
+        lbcs    AnsiReturnError
+        cmpa    #$09
+        lbeq     RPTab
         cmpa    #C_CR
-        beq     RPCR
+        lbeq     RPCR
         cmpa    #C_LF
-        beq     RPLF
+        lbeq     RPLF
         cmpa    #C_BSP
-        beq     RPLeft
+        lbeq     RPLeft
         cmpa    #C_LFT
-        beq     RPLeft
+        lbeq     RPLeft
         cmpa    #C_RGT
-        beq     RPRight
+        lbeq     RPRight
         cmpa    #C_UP
-        beq     RPUp
+        lbeq     RPUp
         cmpa    #C_DWN
-        beq     RPDown
+        lbeq     RPDown
         cmpa    #C_HOME
-        beq     RPHome
+        lbeq     RPHome
         cmpa    #C_CLSALL
-        beq     RPHome
+        lbeq     RPHome
         cmpa    #C_FORM
-        beq     RPHome
+        lbeq     RPHome
         cmpa    #C_SPACE
-        blo     RPDone
+        lblo     RPDone
         lda     CurCol
         cmpa    #SCR_COLS
-        blo     RPIncCol
+        lblo     RPIncCol
         lda     #1
         sta     CurCol
         lda     CurRow
         cmpa    #SCR_ROWS
-        bhs     RPDone
+        lbhs     RPDone
         inca
         sta     CurRow
-        bra     RPDone
+        lbra     RPDone
 RPIncCol
         inca
         sta     CurCol
-        bra     RPDone
+        lbra     RPDone
+RPTab
+        lda     CurCol
+        deca
+        anda    #$F8
+        adda    #9
+        cmpa    #SCR_COLS
+        lbls     RPTabStore
+        lda     #SCR_COLS
+RPTabStore
+        sta     CurCol
+        lbra     RPDone
 RPCR
         lda     #1
         sta     CurCol
-        bra     RPDone
+        lbra     RPDone
 RPLF
         lda     CurRow
         cmpa    #SCR_ROWS
-        bhs     RPDone
+        lbhs     RPDone
         inca
         sta     CurRow
-        bra     RPDone
+        lbra     RPDone
 RPLeft
         lda     CurCol
         cmpa    #1
-        bls     RPDone
+        lbls     RPDone
         deca
         sta     CurCol
-        bra     RPDone
+        lbra     RPDone
 RPRight
         lda     CurCol
         cmpa    #SCR_COLS
-        bhs     RPDone
+        lbhs     RPDone
         inca
         sta     CurCol
-        bra     RPDone
+        lbra     RPDone
 RPUp
         lda     CurRow
         cmpa    #1
-        bls     RPDone
+        lbls     RPDone
         deca
         sta     CurRow
-        bra     RPDone
+        lbra     RPDone
 RPDown
         lda     CurRow
         cmpa    #SCR_ROWS
-        bhs     RPDone
+        lbhs     RPDone
         inca
         sta     CurRow
-        bra     RPDone
+        lbra     RPDone
 RPHome
         lda     #1
         sta     CurRow
         sta     CurCol
 RPDone
         andcc   #$FE
+        rts
+
+* Propagate carry from failed native output without losing the stack frame.
+AnsiReturnError
+        orcc    #$01
         rts
