@@ -15,3 +15,7 @@ Mini FDC transfers use DMA channel 0. `PhysBuf` remains necessary because CP/M r
 The CP/M WRITE type passed in register C is retained in `MBOX_FLAGS`; the implementation deliberately uses the same safe read/modify/write path for normal, directory, and unallocated writes.
 
 Drives E:-H: still return an error because the Standard FDC path is not implemented yet.
+
+## Physical floppy positioning
+
+The 6809 I/O server maintains independent cylinder positions for the four Mini FDC and four Standard FDC drives. Before physical reads and writes it disables the corresponding DMA channel, restores an unknown drive, restores the controller TRACK register from the selected drive's saved position, and issues SEEK only when the requested cylinder differs. Failed positioning or physical I/O invalidates that drive's position. Cold and warm boot invalidate all positions; system reload uses the same physical selection path as normal I/O. Both disk IPLs explicitly RESTORE cylinder zero before loading the resident server. The Z80 BIOS mailbox, logical geometry, and write-through cache are unchanged.

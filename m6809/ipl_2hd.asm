@@ -38,13 +38,14 @@ start               bra       main
 main                orcc      #$50
                     lds       #STAGE1_STACK
 
-* The ROM has already positioned the Standard FDC at T0/H0.
+* Explicitly home the boot drive before loading cylinder zero.
                     clr       >STDFDC_DRIVE
                     clr       >DMA1_MODE
                     lda       #IOSERVER_DMA_BANK
                     sta       >DMA1_BANK
-                    clr       >STDFDC_TRACK
                     clr       >STDFDC_SIDE
+                    lbsr      restore_cylinder_zero
+                    lbcs      boot_error
                     lda       #IOSERVER_FIRSTSEC
                     sta       >STDFDC_SECTOR
                     ldx       #IOSERVER_DMA_ADDR
@@ -177,6 +178,30 @@ dma_done            clr       >DMA1_MODE
                     rts
 
 read_fail           orcc      #$01
+                    rts
+
+* DMA is disabled while a Type I command positions the physical head.
+restore_cylinder_zero
+                    lda       >STDFDC_IRQ
+                    lda       #$0B
+                    sta       >STDFDC_STATUS
+                    ldu       #$FFFF
+restore_wait        lda       >STDFDC_STATUS
+                    bita      #$01
+                    beq       restore_done
+                    leau      -1,u
+                    cmpu      #0
+                    bne       restore_wait
+                    bra       restore_fail
+restore_done        bita      #$90
+                    bne       restore_fail
+                    lda       >STDFDC_TRACK
+                    bne       restore_fail
+                    lda       >STDFDC_IRQ
+                    andcc     #$FE
+                    rts
+restore_fail        lda       >STDFDC_IRQ
+                    orcc      #$01
                     rts
 
 boot_error          bra       boot_error

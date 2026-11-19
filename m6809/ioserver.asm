@@ -59,6 +59,7 @@ IoServerStart
         sta     SaveRow
         sta     SaveCol
         lbsr    CacheInvalidate
+        lbsr    FdcInvalidatePositions
 
         ldx     #TrampolineTemplate
         ldy     #TRAMPOLINE_BASE
@@ -161,6 +162,8 @@ ServiceWriteFail
         lbra    ServiceBad
 
 ServiceWBoot
+        lbsr    CacheInvalidate
+        lbsr    FdcInvalidatePositions
         lbsr    WarmBootReload
         lbcs    ServiceBad
         lbsr    CacheInvalidate
@@ -638,21 +641,77 @@ DlsBad
         orcc    #$01
         rts
 
+* Physical positions are independent of CP/M's logical track and cache.
+* Each controller has four drives. $FF means RESTORE is required.
+FdcInvalidatePositions
+        ldx     #MiniCylinder
+        ldb     #8
+        lda     #$FF
+FipLoop
+        sta     ,x+
+        decb
+        bne     FipLoop
+        rts
+
 MiniFdcSelect
+        clr     DMA0_MODE
         lda     PhysDrive
         anda    #$03
+        ldx     #MiniCylinder
+        leax    a,x
         ora     #MINIFDC_MOTOR
         sta     MINIFDC_DRIVE
         lda     PhysSide
         anda    #$01
         sta     MINIFDC_SIDE
-        lda     PhysTrack
+        lda     MINIFDC_IRQ
+        lda     ,x
+        cmpa    #$FF
+        bne     MpsKnown
+        lda     #FDC_CMD_RESTORE
+        sta     MINIFDC_STATUS
+        lbsr    MiniFdcWaitType1
+        bcs     MpsFail
+        lda     MINIFDC_TRACK
+        bne     MpsFail
+        clr     ,x
+MpsKnown
+        lda     ,x
         sta     MINIFDC_TRACK
+        cmpa    PhysTrack
+        beq     MpsReady
+        lda     PhysTrack
+        sta     MINIFDC_DATA
+        lda     #FDC_CMD_SEEK
+        sta     MINIFDC_STATUS
+        lbsr    MiniFdcWaitType1
+        bcs     MpsFail
+        lda     MINIFDC_TRACK
+        cmpa    PhysTrack
+        bne     MpsFail
+        sta     ,x
+MpsReady
         lda     PhysSector
         sta     MINIFDC_SECTOR
+        andcc   #$FE
+        rts
+MpsFail
+        lda     #$FF
+        sta     ,x
+        orcc    #$01
+        rts
+
+MiniFdcInvalidateDrive
+        ldx     #MiniCylinder
+        lda     PhysDrive
+        anda    #$03
+        leax    a,x
+        lda     #$FF
+        sta     ,x
         rts
 
 MiniFdcWaitType1
+        pshs    x
         ldx     #$FFFF
 MftWait
         lda     MINIFDC_STATUS
@@ -667,35 +726,11 @@ MftDone
         bne     MftFail
         lda     MINIFDC_IRQ
         andcc   #$FE
-        rts
+        puls    x,pc
 MftFail
         lda     MINIFDC_IRQ
         orcc    #$01
-        rts
-
-MiniFdcPrepareSystemTrack
-        lda     #MINIFDC_MOTOR
-        sta     MINIFDC_DRIVE
-        clr     MINIFDC_SIDE
-        lda     MINIFDC_IRQ
-        lda     #FDC_CMD_RESTORE
-        sta     MINIFDC_STATUS
-        lbsr    MiniFdcWaitType1
-        bcs     MfpFail
-        lda     #SYSTEM_TRACK
-        sta     MINIFDC_DATA
-        lda     #FDC_CMD_SEEK
-        sta     MINIFDC_STATUS
-        lbsr    MiniFdcWaitType1
-        bcs     MfpFail
-        lda     MINIFDC_TRACK
-        cmpa    #SYSTEM_TRACK
-        bne     MfpFail
-        andcc   #$FE
-        rts
-MfpFail
-        orcc    #$01
-        rts
+        puls    x,pc
 
 MiniDmaSetupPrivate
         clr     DMA0_MODE
@@ -744,6 +779,7 @@ MfrDone
         lda     MINIFDC_STATUS
         bita    #FDC_READERR
         bne     MfrFailAck
+        lbsr    MiniFdcInvalidateDrive
         lda     MINIFDC_IRQ
         andcc   #$FE
         rts
@@ -756,6 +792,7 @@ MfrFailAck
 
 MiniFdcReadSector
         lbsr    MiniFdcSelect
+        lbcs    MfrFailAck
         lda     MINIFDC_IRQ
         ldx     #PhysBuf
         lbsr    MiniDmaSetupPrivate
@@ -763,6 +800,7 @@ MiniFdcReadSector
 
 MiniFdcReadWBoot
         lbsr    MiniFdcSelect
+        lbcs    MfrFailAck
         lda     MINIFDC_IRQ
         ldx     WBootDest
         lbsr    MiniDmaSetupBank0
@@ -770,6 +808,8 @@ MiniFdcReadWBoot
 
 MiniFdcWriteSector
         lbsr    MiniFdcSelect
+        lbcs    MfwFailAck
+        lbsr    MiniFdcInvalidateDrive
         lda     MINIFDC_IRQ
         ldx     #PhysBuf
         lbsr    MiniDmaSetupPrivate
@@ -807,19 +847,63 @@ MfwFailAck
         rts
 
 StdFdcSelect
+        clr     DMA1_MODE
         lda     PhysDrive
         anda    #$03
+        ldx     #StdCylinder
+        leax    a,x
         sta     STDFDC_DRIVE
         lda     PhysSide
         anda    #$01
         sta     STDFDC_SIDE
-        lda     PhysTrack
+        lda     STDFDC_IRQ
+        lda     ,x
+        cmpa    #$FF
+        bne     SpsKnown
+        lda     #FDC_CMD_RESTORE
+        sta     STDFDC_STATUS
+        lbsr    StdFdcWaitType1
+        bcs     SpsFail
+        lda     STDFDC_TRACK
+        bne     SpsFail
+        clr     ,x
+SpsKnown
+        lda     ,x
         sta     STDFDC_TRACK
+        cmpa    PhysTrack
+        beq     SpsReady
+        lda     PhysTrack
+        sta     STDFDC_DATA
+        lda     #FDC_CMD_SEEK
+        sta     STDFDC_STATUS
+        lbsr    StdFdcWaitType1
+        bcs     SpsFail
+        lda     STDFDC_TRACK
+        cmpa    PhysTrack
+        bne     SpsFail
+        sta     ,x
+SpsReady
         lda     PhysSector
         sta     STDFDC_SECTOR
+        andcc   #$FE
+        rts
+SpsFail
+        lda     #$FF
+        sta     ,x
+        orcc    #$01
+        rts
+
+StdFdcInvalidateDrive
+        ldx     #StdCylinder
+        lda     PhysDrive
+        anda    #$03
+        leax    a,x
+        lda     #$FF
+        sta     ,x
         rts
 
 StdFdcWaitType1
+        pshs    x
         ldx     #$FFFF
 SftWait
         lda     STDFDC_STATUS
@@ -834,34 +918,11 @@ SftDone
         bne     SftFail
         lda     STDFDC_IRQ
         andcc   #$FE
-        rts
+        puls    x,pc
 SftFail
         lda     STDFDC_IRQ
         orcc    #$01
-        rts
-
-StdFdcPrepareSystemTrack
-        clr     STDFDC_DRIVE
-        clr     STDFDC_SIDE
-        lda     STDFDC_IRQ
-        lda     #FDC_CMD_RESTORE
-        sta     STDFDC_STATUS
-        lbsr    StdFdcWaitType1
-        bcs     SfpFail
-        lda     #SYSTEM_TRACK
-        sta     STDFDC_DATA
-        lda     #FDC_CMD_SEEK
-        sta     STDFDC_STATUS
-        lbsr    StdFdcWaitType1
-        bcs     SfpFail
-        lda     STDFDC_TRACK
-        cmpa    #SYSTEM_TRACK
-        bne     SfpFail
-        andcc   #$FE
-        rts
-SfpFail
-        orcc    #$01
-        rts
+        puls    x,pc
 
 StdDmaSetupPrivate
         clr     DMA1_MODE
@@ -878,6 +939,8 @@ StdDmaSetupPrivate
 
 StdFdcReadSector
         lbsr    StdFdcSelect
+        lbcs    SfrFailAck
+        lbsr    StdFdcInvalidateDrive
         lda     STDFDC_IRQ
         lbsr    StdDmaSetupPrivate
         lda     #DMA_READ_MODE
@@ -915,6 +978,8 @@ SfrFailAck
 
 StdFdcWriteSector
         lbsr    StdFdcSelect
+        lbcs    SfwFailAck
+        lbsr    StdFdcInvalidateDrive
         lda     STDFDC_IRQ
         lbsr    StdDmaSetupPrivate
         lda     #DMA_WRITE_MODE
@@ -967,13 +1032,6 @@ StdFdcReadWBoot
 SrwFail
         rts
 
-PrepareBootSystemTrack
-        lda     BOOTTYPE
-        bne     Pbst2HD
-        lbra    MiniFdcPrepareSystemTrack
-Pbst2HD
-        lbra    StdFdcPrepareSystemTrack
-
 BootReadWBoot
         lda     PhysIs2HD
         bne     Brw2HD
@@ -1017,8 +1075,6 @@ InitBootSystemRead
         rts
 
 ColdBootLoadSystem
-        lbsr    PrepareBootSystemTrack
-        bcs     CblFail
         lbsr    InitBootSystemRead
         ldu     #CPM_SYSTEM_SECTORS
 CblSector
@@ -1040,8 +1096,6 @@ CblFail
         rts
 
 WarmBootReload
-        lbsr    PrepareBootSystemTrack
-        bcs     WbrFail
         lbsr    InitBootSystemRead
         ldu     #CPM_WBOOT_SECTORS
 WbrSector
@@ -1146,6 +1200,8 @@ TrampolineTemplate
         jmp     ServiceLoop
 TrampolineTemplateEnd
 
+MiniCylinder    rmb     4
+StdCylinder     rmb     4
 PhysTrack       rmb     1
 PhysSide        rmb     1
 PhysSector      rmb     1

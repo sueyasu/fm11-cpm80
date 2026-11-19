@@ -62,11 +62,14 @@ main                orcc      #$50
 
 * Boot from 2D drive 0.  The first 14 I/O-server sectors are the remainder
 * of T0/H0 after the ROM-loaded IPL; then continue at T0/H1/S1.
-                    clr       >FM11_FDC_DRIVE
+                    lda       #$80
+                    sta       >FM11_FDC_DRIVE
                     clr       >FM11_DMA0_MODE
                     lda       #IOSERVER_DMA_BANK
                     sta       >FM11_DMA0_BANK
                     clr       >FM11_FDC_SIDE
+                    lbsr      restore_cylinder_zero
+                    lbcs      boot_error
                     lda       #IOSERVER_FIRSTSEC
                     sta       >FM11_FDC_SECTOR
                     ldx       #IOSERVER_DMA_ADDR
@@ -173,6 +176,30 @@ dma_done            clr       >FM11_DMA0_MODE
                     bne       dma_fail
                     leax      256,x
                     andcc     #$FE
+                    rts
+
+* DMA is disabled while a Type I command positions the physical head.
+restore_cylinder_zero
+                    lda       >$FD1F
+                    lda       #$0B
+                    sta       >FM11_FDC_CMD
+                    ldu       #$FFFF
+restore_wait        lda       >FM11_FDC_CMD
+                    bita      #$01
+                    beq       restore_done
+                    leau      -1,u
+                    cmpu      #0
+                    bne       restore_wait
+                    bra       restore_fail
+restore_done        bita      #$90
+                    bne       restore_fail
+                    lda       >$FD19
+                    bne       restore_fail
+                    lda       >$FD1F
+                    andcc     #$FE
+                    rts
+restore_fail        lda       >$FD1F
+                    orcc      #$01
                     rts
 
 boot_error          bra       boot_error
