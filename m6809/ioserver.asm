@@ -3,15 +3,14 @@
 * The service is linked at logical $D000 with $D000-$EFFF reserved as an
 * 8 KiB resident window.  The IPL currently loads the image at physical
 * $10000 and maps logical $D000-$DFFF to physical $10000-$10FFF; logical
-* $E000-$EFFF is pre-mapped to physical $11000-$11FFF for future growth.
+* $E000-$EFFF maps to physical $11000-$11FFF. The image including
+* workspace may occupy D000-E7FF; E800-EFFF is reserved for the stack.
 *
 * A on entry identifies the boot floppy family: 0=2D Mini FDC, 1=2HD
 * Standard FDC.  A:-D: always map to the boot family and E:-H: to the other.
 
         include "fm11.inc"
 
-* Select the shortest safe relative branch encoding, including forward refs.
-        pragma  autobranchlength
 
 TRAMPOLINE_BASE equ    $FE00
 CPM_SYSTEM_DEST equ    $DC00
@@ -30,7 +29,7 @@ SYSTEM_TRACK    equ    1
 * logical page C.  Sectors are filled lazily and writes remain write-through.
 CACHE_PAGE_BASE equ    $12
 CACHE_MAX_SECTORS equ  52
-* Private E000-EFFF maps to physical 11000-11FFF; never use CP/M TPA.
+* Private E800-EFFF maps to physical 11800-11FFF; never use CP/M TPA.
 IOSERVER_STACK_TOP equ $F000
 
         org     $D000
@@ -1187,3 +1186,5 @@ CacheIndex      rmb     1
 CacheValidMap   rmb     CACHE_MAX_SECTORS
         endc
 PhysBuf         rmb     256
+* Emit a final byte so the binary-size check includes trailing workspace.
+IoServerEndMarker fcb   0

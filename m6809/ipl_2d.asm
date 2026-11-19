@@ -5,14 +5,13 @@
 * to $0400.  The IPL stays on cylinder 0 and loads only the resident
 * 6809 I/O server:
 *
-*   disk $0200-$11FF -> physical $10000-$10FFF
-*       current resident 6809 I/O-server image (maximum $1000 bytes)
+*   disk $0200-$19FF -> physical $10000-$117FF
+*       resident 6809 I/O-server image (maximum $1800 bytes)
 *
-* The first 14 sectors come from T0/H0/S3-S16 and the final two from
-* T0/H1/S1-S2.  The I/O server is linked at logical $D000.  Before
-* entering it, MMR13 maps logical $D000-$DFFF to physical $10000-$10FFF
-* and MMR14 reserves logical $E000-$EFFF for physical $11000-$11FFF so
-* the resident service can grow to 8 KiB without another relocation.
+* The first 14 sectors come from T0/H0/S3-S16 and the final 10 from
+* T0/H1/S1-S10. The server is linked at logical $D000.
+* MMR13/14 map $D000-$EFFF to physical $10000-$11FFF; the upper
+* 2 KiB ($E800-$EFFF) are reserved for its downward-growing stack.
 ********************************************************************
 
                     org       $0400
@@ -48,7 +47,7 @@ DMA_READ_MODE       equ       DMA_DIR_READ+DMA_ENABLE
 STAGE1_STACK        equ       $2000
 IOSERVER_DMA_ADDR   equ       $0000      * physical $10000, bank=1
 IOSERVER_DMA_BANK   equ       $01
-IOSERVER_SECTORS    equ       16         * 16 x 256 = $1000
+IOSERVER_SECTORS    equ       24         * 24 x 256 = $1800
 IOSERVER_FIRSTSEC   equ       3
 
 MBOX_BASE           equ       $FBF6

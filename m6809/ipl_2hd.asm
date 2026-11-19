@@ -3,14 +3,14 @@
 *
 * FM-11 ROM IPL loads T0/H0/S1-S4.  The 2HD boot track is the
 * standard IBM-style special track: T0/H0 has 26 x 128-byte sectors.
-* The IPL loads a 4 KiB resident 6809 I/O-server slot from the rest of
+* The IPL loads a 6 KiB resident 6809 I/O-server slot from the rest of
 * T0/H0 plus the start of T0/H1:
 *
 *   T0/H0/S5-S26 : 22 x 128 = $0B00
-*   T0/H1/S1-S5  :  5 x 256 = $0500
-*   total                    = $1000
+*   T0/H1/S1-S13 : 13 x 256 = $0D00
+*   total                    = $1800
 *
-* The image is loaded into private physical RAM $10000-$10FFF, then the
+* The image is loaded into private physical RAM $10000-$117FF, then the
 * IPL establishes the 8 KiB logical resident window at $D000-$EFFF and
 * enters the I/O server with A=BOOT_2HD.
 ********************************************************************
@@ -23,7 +23,7 @@ STAGE1_STACK        equ       $2000
 IOSERVER_DMA_ADDR   equ       $0000      * physical $10000, bank=1
 IOSERVER_DMA_BANK   equ       $01
 IOSERVER_H0_SECTORS equ       22
-IOSERVER_H1_SECTORS equ       5
+IOSERVER_H1_SECTORS equ       13
 IOSERVER_FIRSTSEC   equ       5
 BOOT_SECTOR_SIZE    equ       128
 NORMAL_SECTOR_SIZE  equ       256

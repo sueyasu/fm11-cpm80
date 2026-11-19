@@ -58,8 +58,9 @@ FBF6-FBFF  Z80/6809 mailbox
 FC00-FFFF  memory-mapped I/O
 ```
 
-The 6809 I/O server is not stored in Z80 RAM. It is linked at logical `$E000`,
-loaded at physical `$10000`, and reached through MMR14 while the 6809 runs.
+The 6809 I/O server is linked at logical D000 and loaded at physical 10000
+through MMR13/14. Its maximum image size is 1800h bytes; the upper 2 KiB
+of the private 8 KiB mapping are reserved for the stack.
 
 ## Build
 
@@ -67,10 +68,8 @@ loaded at physical `$10000`, and reached through MMR14 while the 6809 runs.
 make
 ```
 
-The default build creates both the bootable 2D system disk and a formatted
-non-bootable 2HD data disk. The 2HD image uses the E:-H: DPB and can be read
-and written through the FM-11 Standard FDC at runtime; only 2HD boot remains
-unsupported.
+The default build creates both bootable 2D and 2HD system disks. Both
+load the identical 6 KiB I/O-server slot from their respective cylinder 0.
 
 Useful individual targets:
 
@@ -93,6 +92,7 @@ Outputs include:
 build/z80/bios.bin
 build/m6809/ioserver.bin
 build/m6809/ipl_2d.bin
+build/m6809/ipl_2hd.bin
 build/cpm22/system62.bin
 build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2d.d88

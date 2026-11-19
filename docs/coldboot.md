@@ -9,21 +9,23 @@ MC6809 I/O server.  The key rule is that the IPL itself never leaves cylinder 0.
 The FM-11 ROM IPL loads physical sectors T0/H0/S1-S2 (2 x 256 bytes) to `$0400`
 and transfers control there.
 
-The IPL then reads only T0/H0/S3-S10, using DMA channel 0, and places the
-complete resident I/O server in private physical RAM:
+The 2D IPL reads 24 sectors: T0/H0/S3-S16 and T0/H1/S1-S10.
+The 2HD ROM loads T0/H0/S1-S4 (128 bytes each); its IPL then reads
+T0/H0/S5-S26 (22 x 128) and T0/H1/S1-S13 (13 x 256).
+
+Both loaders transfer a 6 KiB resident slot:
 
 ```text
 Disk raw        Physical RAM       Contents
-$0200-$09FF ->  $10000-$107FF      I/O-server slot (maximum $0800)
+$0200-$19FF ->  $10000-$117FF      I/O server and workspace
 ```
 
-No SEEK or STEP operation is issued by the IPL.  After the load it initializes
-the task-0 MMR map, maps logical `$E000-$EFFF` to physical `$10000-$10FFF`, and
-jumps to the I/O server at `$E000`.
+The IPL never leaves cylinder 0. It maps logical D000-EFFF onto physical
+10000-11FFF and jumps to D000.
 
 ## Cylinder-1 CP/M system image
 
-Cylinder 1 contains the one and only CP/M system image:
+Cylinder 1 contains the one and only CP/M system image. The following raw offsets are for 2D; on 2HD the system starts at raw 2700h.
 
 ```text
 Disk raw        Z80 physical RAM   Contents
@@ -65,22 +67,14 @@ combined system payload is exactly `$1A00` bytes.
 
 ## 6809 private mapping
 
-The I/O server is linked at logical `$E000` and loaded at physical `$10000`.
-Before entering it, the IPL initializes hardware task 0 as an identity map and
-changes only MMR14:
+The I/O server is linked at logical D000. The IPL maps MMR13=10h and
+MMR14=11h. D000-E7FF is the resident image and workspace; E800-EFFF
+(physical 11800-11FFF) is the dedicated stack, starting at F000.
+The optional write-through cache occupies physical 12000-15FFF.
 
-```text
-6809 logical        Physical RAM
-$E000-$EFFF   ->    $10000-$10FFF   (MMR14 = $10)
-```
-
-Logical page `$D000-$DFFF` is reserved as a temporary 6809 window onto Z80
-physical bank-0 RAM. For each normal CP/M READ/WRITE, the 16-bit DMA address in
-the mailbox selects the physical 4 KiB page loaded into MMR13; the record is
-then copied through `$D000-$DFFF` between the Z80 buffer and the private
-256-byte blocking/deblocking buffer. The previous MMR13 value is restored after
-the copy, and a 128-byte record crossing a 4 KiB boundary advances the window
-to the next physical page.
+Logical page C (C000-CFFF) is the temporary access window onto Z80 RAM
+or cache RAM. MMR12 is saved and restored around copies; 128-byte records
+crossing a 4 KiB boundary are copied through two mappings.
 
 The CPU hand-off trampoline is copied to fixed CPU-card SRAM at `$FE00`. This
 SRAM remains visible independently of the MMR. The shared Z80/6809 mailbox

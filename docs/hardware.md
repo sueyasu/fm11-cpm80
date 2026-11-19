@@ -22,25 +22,18 @@ The shared Z80/6809 mailbox occupies the highest ten bytes of Z80-visible RAM,
 
 ## 6809 private I/O-server memory
 
-The FM-11 main CPU has sixteen 4 KiB MMR entries. CP/M uses hardware task 0 and
-keeps that task identity-mapped except for logical page E:
+The IPL reserves logical D000-EFFF in MMR task 0:
 
 ```text
-6809 logical        Physical RAM
-$E000-$EFFF   ->    $10000-$10FFF
+6809 logical        Physical RAM       Use
+D000-E7FF     ->    10000-117FF        I/O server, code and data
+E800-EFFF     ->    11800-11FFF        private stack (initial S=F000)
+                    12000-15FFF        floppy cache when enabled
 ```
 
-The I/O server is linked at logical `$E000` and loaded at physical `$10000`.
-The complete current service is limited to `$0400` bytes, so it fits entirely
-inside this one private page. The private page also contains the 256-byte
-blocking/deblocking buffer.
-
-Logical page D (`$D000-$DFFF`) is reserved as a temporary 6809 window onto Z80
-physical bank-0 RAM. When a CP/M disk call supplies a 16-bit DMA address, the
-I/O server interprets it as a physical address in `$00000-$0FBFF`, maps the
-containing 4 KiB physical page into MMR13, and accesses it through `$D000-$DFFF`.
-The previous MMR13 value is saved and restored around each copy. A 128-byte
-logical record that crosses a 4 KiB boundary is copied in two mapped segments.
+Logical page C (C000-CFFF) is the temporary 6809 window onto Z80
+bank-0 RAM or cache RAM through MMR12. Its previous mapping is saved
+and restored. Records crossing a 4 KiB boundary are copied in two segments.
 
 This window exists only in the 6809 logical address space. The Z80 memory map is
 unchanged, so CP/M applications can use DMA buffers in TPA, CCP/BDOS, or other

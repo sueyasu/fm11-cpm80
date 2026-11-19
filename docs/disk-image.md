@@ -14,9 +14,8 @@ build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2hd.raw
 ```
 
-The 2D image is the current bootable system disk. The 2HD image is a formatted
-non-bootable data disk prepared for the existing 2HD DPB and is accessible at
-runtime through the Standard FDC as E:-H:. 2HD boot remains unsupported.
+Both images are bootable. A:-D: map to the controller family used at boot;
+E:-H: map to the other family.
 
 ## 2D geometry
 
@@ -40,8 +39,8 @@ The active system layout is:
 
 ```text
 0000-01FF  IPL (ROM loads this to 6809 $0400)
-0200-09FF  6809 I/O-server slot -> physical $10000-$107FF
-0A00-1FFF  reserved/zero padding
+0200-19FF  6809 I/O-server slot -> physical $10000-$117FF
+1A00-1FFF  reserved/zero padding
 2000-39FF  system62.bin -> Z80 physical $DC00-$F5FF
 3A00-3FFF  reserved/zero padding
 4000-4FFF  CP/M directory (allocation blocks 0 and 1)
@@ -49,8 +48,8 @@ The active system layout is:
 ```
 
 Cylinder 0 is therefore exclusively the 6809 boot environment. The ROM-loaded
-IPL stays on cylinder 0 and loads only T0/H0/S3-S10, the eight-sector I/O-server
-slot. The IPL never performs a SEEK or STEP.
+IPL stays on cylinder 0 and loads T0/H0/S3-S16 and T0/H1/S1-S10,
+the 24-sector I/O-server slot. The IPL never performs a SEEK or STEP.
 
 After the resident I/O server is running from private RAM, it initializes the
 Mini FDC, moves to cylinder 1, and loads `system62.bin` from T1/H0/S1 onward.
@@ -63,7 +62,7 @@ physical sectors to restore CCP+BDOS at `$DC00-$F1FF`; BIOS remains resident.
 There is no duplicate warm-boot system copy.
 
 The 2D image builder rejects an IPL larger than `$0200`, a system payload whose
-size is not exactly `$1A00`, or an I/O server larger than `$0800`.
+size is not exactly `$1A00`, or an I/O server larger than `$1800`.
 
 The 2D DPB is:
 
@@ -76,36 +75,25 @@ AL0=C0h     directory uses blocks 0 and 1
 OFF=2       two reserved cylinders
 ```
 
-## 2HD data image
+## 2HD boot image
 
-The generated 2HD image uses the geometry already described by the BIOS DPB:
-
-```text
-77 cylinders
-2 heads
-26 physical sectors/head
-256 bytes/physical sector
-raw size = $FA400 bytes
-```
-
-The D88 image uses media type `20h` (2HD), 154 formatted track entries, 26
-sectors per track entry, and 256-byte sectors.
-
-DPB `OFF=2` reserves cylinders 0 and 1, giving a `$6800`-byte system area. The
-current 2HD image is deliberately non-bootable, so that area is zero-filled:
+77 cylinders, two heads, 26 sectors per head. T0/H0 uses 128-byte
+single-density sectors; all other tracks use 256-byte sectors.
+The D88 media type is 20h. DPB OFF=2 reserves cylinders 0 and 1.
 
 ```text
-00000-067FF  reserved system area
-06800-077FF  CP/M directory (allocation block 0)
-07800-       file data (allocation block 1 onward)
+00000-001FF  IPL (T0/H0/S1-S4)
+00200-00CFF  I/O server first 0B00h bytes (T0/H0/S5-S26)
+00D00-019FF  I/O server remaining 0D00h bytes (T0/H1/S1-S13)
+01A00-026FF  reserved/zero padding
+02700-040FF  system62.bin (T1/H0/S1-S26)
+04100-05AFF  reserved/zero padding
+05B00-06AFF  CP/M directory (allocation block 0)
+06B00-       file data (allocation block 1 onward)
 ```
 
-At runtime CP/M maps E:-H: to Standard-FDC drives 0-3. The Standard FDC uses
-DMA channel 1. Each physical sector is 256 bytes while CP/M records are 128
-bytes, so reads select the requested half of a private 256-byte buffer and
-writes use a read/modify/write cycle to preserve the neighbouring record.
-Because `OFF=2`, normal CP/M file I/O starts at cylinder 2 and does not touch
-the special boot-track formats used by some FM-11 2HD media.
+Normal disk I/O begins at cylinder 2 and does not touch the mixed-density
+boot track. Standard FDC uses DMA channel 1 with 256-byte physical sectors.
 
 The 2HD DPB is:
 
