@@ -162,7 +162,6 @@ ServiceWBoot
         lbsr    WarmBootReload
         lbcs    ServiceBad
         lbsr    CacheInvalidate
-        ifdef   FLOPPY_CACHE
         clr     AnsiState
         clr     AnsiParam
         clr     AnsiPrivate
@@ -393,6 +392,7 @@ LkfFail
 ********************************************************************
 * One-track physical-sector cache
 ********************************************************************
+        ifdef   FLOPPY_CACHE
 CacheInvalidate
         clr     CacheTagValid
         ldx     #CacheValidMap
@@ -527,6 +527,7 @@ RpcFail
         rts
 
         else
+CacheInvalidate
         rts
         endc
 
