@@ -10,6 +10,9 @@
 
         include "fm11.inc"
 
+* Select the shortest safe relative branch encoding, including forward refs.
+        pragma  autobranchlength
+
 TRAMPOLINE_BASE equ    $FE00
 CPM_SYSTEM_DEST equ    $DC00
 CPM_SYSTEM_SECTORS equ 26

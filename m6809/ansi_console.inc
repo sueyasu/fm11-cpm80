@@ -54,9 +54,7 @@ APNormal
         rts
 
 APOrdinary
-        lbsr    RawPutCTracked
-        lbcs    AnsiReturnError
-        rts
+        lbra    RawPutCTracked
 
 APEscapeReset
         clr     AnsiState
@@ -324,9 +322,7 @@ APCNLoop
         lbra     APCNLoop
 APCNCR
         lda     #C_CR
-        lbsr    RawPutCTracked
-        lbcs    AnsiReturnError
-        rts
+        lbra    RawPutCTracked
 
 APCursorPrevLine
         lbsr    APGetCount
@@ -340,9 +336,7 @@ APCPLoop
         lbra     APCPLoop
 APCPCR
         lda     #C_CR
-        lbsr    RawPutCTracked
-        lbcs    AnsiReturnError
-        rts
+        lbra    RawPutCTracked
 
 APCursorPos
         lda     AnsiP1
@@ -353,9 +347,7 @@ APCPRowOk
         lbne     APCPColOk
         ldb     #1
 APCPColOk
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 APAbsCol
         lda     CurRow
@@ -363,9 +355,7 @@ APAbsCol
         lbne     APACOk
         ldb     #1
 APACOk
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 APAbsRow
         lda     AnsiP1
@@ -373,9 +363,7 @@ APAbsRow
         lda     #1
 APAROk
         ldb     CurCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 APEraseDisplay
         ldb     AnsiP1
@@ -383,13 +371,9 @@ APEraseDisplay
         lbeq     APEDAll
         cmpb    #1
         lbeq     APEDStart
-        lbsr    AnsiEraseToEnd
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiEraseToEnd
 APEDStart
-        lbsr    AnsiEraseFromStart
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiEraseFromStart
 APEDAll
         lda     CurRow
         sta     WorkRow
@@ -399,21 +383,15 @@ APEDAll
         lbcs    AnsiReturnError
         lda     WorkRow
         ldb     WorkCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 APEraseLine
         ldb     AnsiP1
-        lbsr    AnsiEraseLine
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiEraseLine
 
 APEraseChars
         lbsr    APGetCount
-        lbsr    AnsiEraseChars
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiEraseChars
 
 APSgr
         ldy     #AnsiP1
@@ -522,9 +500,7 @@ ApplyNativeAttr
         lbsr    LocalPutC
         lbcs    AnsiReturnError
         lda     NativeAttr
-        lbsr    LocalPutC
-        lbcs    AnsiReturnError
-        rts
+        lbra    LocalPutC
 
 AnsiColorMap
         fcb     0,2,4,6,1,3,5,7
@@ -540,9 +516,7 @@ APCsiSave
 APCsiRestore
         lda     SaveRow
         ldb     SaveCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 * NitrOS-9 accepts CSI ? 25 h/l as a no-op because cursor visibility is not
 * directly controllable through the FM-11 native interface.  Keep the same
@@ -610,9 +584,7 @@ AnsiEraseLine
         lbeq     AELStart
         cmpb    #2
         lbeq     AELAll
-        lbsr    NativeEraseEOL
-        lbcs    AnsiReturnError
-        rts
+        lbra    NativeEraseEOL
 AELStart
         lda     LineRow
         ldb     #1
@@ -632,9 +604,7 @@ AELAll
 AELRestore
         lda     LineRow
         ldb     LineCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 AnsiEraseChars
         lda     CurRow
@@ -645,9 +615,7 @@ AnsiEraseChars
         lbcs    AnsiReturnError
         lda     LineRow
         ldb     LineCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 EraseCells
         cmpb    #0
@@ -674,9 +642,7 @@ ECDone
         rts
 
 AnsiEraseToEnd
-        lbsr    NativeEraseEOS
-        lbcs    AnsiReturnError
-        rts
+        lbra    NativeEraseEOS
 
 AnsiEraseFromStart
         lda     CurRow
@@ -707,36 +673,28 @@ AEFSCurrent
         lbcs    AnsiReturnError
         lda     WorkRow
         ldb     WorkCol
-        lbsr    AnsiGoto
-        lbcs    AnsiReturnError
-        rts
+        lbra    AnsiGoto
 
 NativeEraseEOL
         lda     #ANSI_ESC
         lbsr    LocalPutC
         lbcs    AnsiReturnError
         lda     #'T
-        lbsr    LocalPutC
-        lbcs    AnsiReturnError
-        rts
+        lbra    LocalPutC
 
 NativeEraseEOS
         lda     #ANSI_ESC
         lbsr    LocalPutC
         lbcs    AnsiReturnError
         lda     #'Y
-        lbsr    LocalPutC
-        lbcs    AnsiReturnError
-        rts
+        lbra    LocalPutC
 
 NativeEraseAll
         lda     #ANSI_ESC
         lbsr    LocalPutC
         lbcs    AnsiReturnError
         lda     #'*
-        lbsr    LocalPutC
-        lbcs    AnsiReturnError
-        rts
+        lbra    LocalPutC
 
 RawPutCTracked
         pshs    a
