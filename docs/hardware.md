@@ -60,8 +60,10 @@ The project deliberately uses only interfaces known to be appropriate from the Z
 - `$FD2F` Z80 bank register
 - shared memory/status interfaces where documented
 
-FDC, DMA and 6809 MMR registers are owned by the main CPU service rather than
-accessed directly by the Z80.
+FDC, DMA, USART0 and 6809 MMR registers are owned by the main CPU service
+rather than accessed directly by the Z80. The two direct Z80 hardware
+operations (bank initialization and CPU hand-off) live only in the
+Z80-specific CBIOS backend `cpm22/bios/cpu_z80.asm`.
 
 ## Floppy controllers
 

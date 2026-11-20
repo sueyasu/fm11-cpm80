@@ -37,8 +37,11 @@ $(Z80_BUILD) $(M6809_BUILD) $(CPM_BUILD) $(IMAGE_BUILD):
 
 bios: $(Z80_BUILD)/bios.bin
 
-$(Z80_BUILD)/bios.bin: cpm22/bios/bios.asm include/z80/fm11.inc Makefile | $(Z80_BUILD)
-	cat include/z80/fm11.inc cpm22/bios/bios.asm > $(Z80_BUILD)/bios.asm
+BIOS_COMMON := include/8080/mailbox.inc cpm22/bios/bios.asm
+BIOS_Z80    := include/z80/fm11.inc cpm22/bios/cpu_z80.asm
+
+$(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) Makefile | $(Z80_BUILD)
+	cat include/8080/mailbox.inc include/z80/fm11.inc cpm22/bios/bios.asm cpm22/bios/cpu_z80.asm > $(Z80_BUILD)/bios.asm
 	$(ASM8080) $(Z80_BUILD)/bios.asm -o$(basename $@)
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x400 --name "CP/M 2.2 BIOS (F200-F5FF)"
 

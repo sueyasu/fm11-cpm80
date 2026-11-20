@@ -24,7 +24,8 @@ input file's drive if necessary (e.g. `E>SUBMIT A:TEST`).
 
 ## Source and license
 
-- cpm22/: CCP/BDOS and 8080-compatible CBIOS (currently for the Z80 card)
+- cpm22/: CCP/BDOS, common 8080 CBIOS, and Z80-specific CPU hooks
+- include/8080/: common mailbox ABI definitions
 - m6809/: disk IPLs and resident I/O service
 - include/: hardware definitions
 - tools/: image builders and checks

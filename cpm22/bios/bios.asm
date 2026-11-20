@@ -1,16 +1,16 @@
-; FM-11 CP/M 2.2 BIOS
+; FM-11 CP/M 2.2 common CBIOS
 ;
 ; 62K system layout:
 ;   CCP  = DC00h
 ;   BDOS = E400h
 ;   BIOS = F200h
-;   6809 resident service = physical RAM above 10000h
 ;   disk workspace        = F970h-FBE7h
 ;   boot drive            = FBF4h (0=A, 4=E)
 ;   boot type             = FBF5h (0=2D, 1=2HD)
 ;   mailbox               = FBF6h-FBFFh
 ;
-; Intel 8080 syntax for asm8080; runs on the FM-11 Z80 card.
+; Intel 8080 syntax for asm8080. All hardware access is via the mailbox
+; and the target-specific CPU_INIT / CPU_IOCALL hooks.
 
 CCPBASE EQU     0DC00H
 BDOSENT EQU     0E406H
@@ -66,14 +66,11 @@ ALV7 EQU     ALV6+31
 ; ----------------------------------------------------------------------
 
 BOOT EQU     $
-        ; Z80 reset leaves SP undefined (zero in the emulator).  The
-        ; first CALL must not push its return address into FC00h-FFFFh,
-        ; which is the I/O aperture, not RAM.  Use the same reserved
-        ; boot stack as WBOOT, immediately below the disk workspace.
+        ; Establish the common boot stack before calling any target hook.
+        ; CPU_INIT may clobber A/flags, but must return on this stack.
         LXI     SP,0F960H
-        XRA     A
-        STA     FM11_BANK  ; CP/M 2.2 always runs with Z80 bank 0
-        INR     A
+        CALL    CPU_INIT
+        MVI     A,1
         STA     0003H  ; IOBYTE: CON:=CRT selects FM-11 local console
         XRA     A
         STA     UC1_NEXT
@@ -389,7 +386,7 @@ SECTRAN  MOV     H,B
         RET
 
 ; ----------------------------------------------------------------------
-; Z80 -> 6809 synchronous service call
+; Common synchronous mailbox service call
 ; ----------------------------------------------------------------------
 
 DISK_CALL  STA     MBOX_CMD
@@ -417,22 +414,16 @@ DISK_CALL  STA     MBOX_CMD
         MOV     A,L
         STA     MBOX_DMA_L
 
-        DI
-        XRA     A
-        STA     FM11_CPUCTL  ; stop Z80, resume 6809
-        NOP       ; Z80 resumes here
-        EI
-        LDA     MBOX_STATUS
-        ORA     A
-        RET
+        JMP     MBOX_EXEC
 
 MBOX_SIMPLE  STA     MBOX_CMD
         XRA     A
         STA     MBOX_STATUS
-        DI
-        STA     FM11_CPUCTL
-        NOP
-        EI
+
+; Target hook executes the posted command synchronously. It must preserve
+; BC, DE, HL and SP; A/flags may change. Only the common code interprets
+; MBOX_STATUS, so every backend returns A and Z consistently to BIOS callers.
+MBOX_EXEC  CALL    CPU_IOCALL
         LDA     MBOX_STATUS
         ORA     A
         RET

@@ -17,6 +17,25 @@ This is synchronous. The implementation deliberately does not depend on Z80 inte
 
 Keeping the trampoline in fixed CPU-card SRAM means the CPU-switch point does not depend on the 6809 MMR mapping. This is intended to allow the resident service to move to high physical RAM later without changing the hand-off mechanism.
 
+## CBIOS target hooks
+
+The common 8080 CBIOS (`cpm22/bios/bios.asm`) uses the mailbox definitions
+in `include/8080/mailbox.inc`. All CPU-specific operations are implemented
+by `cpm22/bios/cpu_z80.asm` for the current Z80 target.
+
+- `CPU_INIT`: called once on cold boot after the common stack is set up.
+  Initializes target CPU state (Z80 bank zero); not called on WBOOT.
+- `CPU_IOCALL`: called with a complete mailbox request already posted.
+  Returns only after native service completion. The main CPU may be 6809
+  or 8088 when using a Z80 card; a future V20 backend can instead use CALLN.
+
+Both hooks preserve BC, DE, HL and the caller's stack; A and flags may be
+clobbered. The backend owns interrupt handling (Z80 retains DI, hardware
+handoff, NOP, EI). The common MBOX_EXEC reads STATUS and sets A/Z after
+return; the backend does not interpret or erase the result. Mailbox addresses
+are CP/M logical addresses and must resolve to the same shared memory on
+both sides. No new CPU target is implemented by this change.
+
 ## Mailbox
 
 Base address: `$FBF6`. The ten-byte block ends exactly at the top of Z80-visible RAM (`$FBFF`) so lower RAM remains free for CP/M use.
