@@ -197,146 +197,34 @@ HEXOUT MOV E,A
         JMP 5
 PRINT   MVI C,9
         JMP 5
-MSGSTART DB 'M2243B last-block test',13,10,'$'
-MSGREAD DB 'PASS: all 128 records read',13,10,'$'
-MSGOK   DB 'PASS: random write/readback; verify image on host',13,10,'$'
-MSGGEO DB 'PASS: DSM=1006h',13,10,'
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DB 0,0,0,0,0,0,0,0,0,0,0,0
-        DB 0,0,0,0,0,0,0,0,0,0,0,0
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGOPEN DB 'PASS: TAIL.DAT opened',13,10,'
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGDRV DB 'FAIL: current drive=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGGEOBAD DB 'FAIL: DSM=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGOPENBAD DB 'FAIL: open status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGREADBAD DB 'FAIL: sequential read record=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGDATA DB 'FAIL: data record=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGOFF DB ' offset=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGEXP DB ' expected=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGACT DB ' actual/status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGWRITE DB 'FAIL: random write status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGCLOSE DB 'FAIL: close status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGREOPEN DB 'FAIL: reopen status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGRANDOM DB 'FAIL: random read status=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGVERIFY DB 'FAIL: random readback byte=
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
-MSGNL DB 13,10,'
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
-BUF     DS 128
-        DS 128
-STACKTOP EQU $
-
+MSGSTART DB 'M2243B last-block test',13,10,24H
+MSGREAD DB 'PASS: all 128 records read',13,10,24H
+MSGOK   DB 'PASS: random write/readback; verify image on host',13,10,24H
+MSGGEO DB 'PASS: DSM=1006h',13,10,24H
+MSGOPEN DB 'PASS: TAIL.DAT opened',13,10,24H
+MSGDRV DB 'FAIL: current drive=',24H
+MSGGEOBAD DB 'FAIL: DSM=',24H
+MSGOPENBAD DB 'FAIL: open status=',24H
+MSGREADBAD DB 'FAIL: sequential read record=',24H
+MSGDATA DB 'FAIL: data record=',24H
+MSGOFF DB ' offset=',24H
+MSGEXP DB ' expected=',24H
+MSGACT DB ' actual/status=',24H
+MSGWRITE DB 'FAIL: random write status=',24H
+MSGCLOSE DB 'FAIL: close status=',24H
+MSGREOPEN DB 'FAIL: reopen status=',24H
+MSGRANDOM DB 'FAIL: random read status=',24H
+MSGVERIFY DB 'FAIL: random readback byte=',24H
+MSGNL DB 13,10,24H
 DSMLO DB 0
 DSMHI DB 0
 ACTUAL DB 0
 EXPECTED DB 0
 REMAIN DB 0
-RECNO   DB 0
-FCB     DB 9,'TAIL    DAT'
-        DS 24
+RECNO DB 0
+FCB DB 9,'TAIL    DAT'
+        DB 0,0,0,0,0,0,0,0,0,0,0,0
+        DB 0,0,0,0,0,0,0,0,0,0,0,0
 BUF     DS 128
         DS 128
 STACKTOP EQU $
