@@ -1,0 +1,36 @@
+# FM-11 CP/M-80 (CP/M 2.2) unpadded RAW disk images.
+# Sector order: cylinder, head, sector number; no headers or skew.
+# Use from the repository root, e.g.:
+#   cpmls -f fm11-cpm80-2d build/images/fm11-cpm80-2d.raw
+#   cpmls -f fm11-cpm80-2hd build/images/fm11-cpm80-2hd.raw
+#
+# 2D: 40 cylinders, 2 heads, 16 x 256-byte sectors per side.
+# Two reserved cylinders = four side-tracks (0x4000 bytes).
+# DSM=151, DRM=127, AL0=C0h; two 2 KiB directory blocks.
+diskdef fm11-cpm80-2d
+  seclen 256
+  tracks 80
+  sectrk 16
+  blocksize 2048
+  maxdir 128
+  boottrk 4
+  skew 0
+  os 2.2
+end
+
+# 2HD: 77 cylinders, 2 heads, 26 sectors per side.
+# C0/H0 has 128-byte sectors; all other sides have 256-byte sectors.
+# RAW size: 1021696 bytes. Skip the two reserved cylinders with
+# offset 23296 (0x5b00), leaving 150 uniform filesystem side-tracks.
+# DSM=242, DRM=127, AL0=80h; one 4 KiB directory block.
+diskdef fm11-cpm80-2hd
+  seclen 256
+  tracks 150
+  sectrk 26
+  blocksize 4096
+  maxdir 128
+  boottrk 0
+  offset 23296
+  skew 0
+  os 2.2
+end

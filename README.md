@@ -18,6 +18,19 @@ Optional COM files in external/commands/ are included in both images.
 Experimental 8088+Z80 target: install NASM and run `make image8088`.
 See [docs/8088-z80.md](docs/8088-z80.md). The default build is unchanged.
 
+## Accessing RAW images with cpmtools
+
+The supplied [diskdefs](diskdefs) supports both unpadded RAW formats,
+including the mixed-sector-size 2HD layout. From the repository root:
+
+```sh
+cpmls -f fm11-cpm80-2d build/images/fm11-cpm80-2d.raw
+cpmls -f fm11-cpm80-2hd build/images/fm11-cpm80-2hd.raw
+```
+
+The same definitions apply to the experimental 8088+Z80 RAW images.
+They do not apply directly to D88 files.
+
 ## Boot drive and SUBMIT
 
 BDOS function 13 resets the disk system on the actual boot drive; CCP reads
