@@ -189,3 +189,13 @@ $(V20_D88_2HD) $(V20_RAW_2HD) &: $(I8086_BUILD)/ipl_2hd.bin $(V20_BUILD)/system6
 test-v20: imagev20
 	$(PYTHON) tests/check_cache_api.py $(V20_BUILD)/bios.bin
 	$(PYTHON) tests/check_v20.py $(V20_BUILD) $(I8086_BUILD) $(IMAGE_BUILD)
+
+# Data-only HDD image (never overwrites an existing image).
+HDD_MODEL ?= m2233b
+HDD_DATA_IMAGE ?= $(IMAGE_BUILD)/fm11-cpm80-$(HDD_MODEL)-data.img
+.PHONY: hdd-data test-hdd-data
+hdd-data:
+	$(PYTHON) tools/mk_hdd_data.py --model $(HDD_MODEL) $(HDD_DATA_IMAGE)
+test-hdd-data: bios8088 biosv20 ioserver8088 ioserverv20
+	$(PYTHON) tests/check_cache_api.py $(I8086_BUILD)/bios.bin $(V20_BUILD)/bios.bin
+	PYTHONPATH=tools $(PYTHON) tests/check_hdd_geometry.py

@@ -78,6 +78,11 @@ server_dispatch:
     call cache_reset
     jmp finish
 .not_cache_reset:
+    cmp al,MBCMD_HDD_GEOM
+    jne .not_geometry
+    call hdd_geometry
+    jmp finish
+.not_geometry:
     cmp al,0x10
     jne .not_lconst
     call local_const
@@ -213,8 +218,9 @@ decode_request:
     mov bx,ax
     mov al,[es:MBOX_DRIVE]
     cmp al,8
-    jae .bad
+    ja .bad
     mov [cur_disk],al
+    je .hdd
     mov dx,32             ; logical records per 2D side
     cmp al,4
     jae .hd
@@ -235,6 +241,16 @@ decode_request:
     cmp ax,dx
     jae .bad
     inc bx
+    jmp .first_side
+.hdd:
+    cmp byte [hdd_ready],1
+    jne .bad
+    cmp bx,[hdd_total_tracks]
+    jae .bad
+    mov ax,[es:MBOX_SECTOR]
+    xchg al,ah
+    cmp ax,64
+    jae .bad
 .first_side:
     mov [cur_track],bx
     mov [cur_sector],ax
@@ -248,6 +264,10 @@ decode_request:
 ; CL=1-based physical sector, DH=head, AL=logical drive.
 ; Preserve registers so eviction restores the original request.
 sector_physical_read:
+    cmp byte [cur_disk],8
+    jne .floppy
+    jmp hdd_read
+.floppy:
     push ax
     push bx
     push cx
@@ -261,6 +281,10 @@ sector_physical_read:
     ret
 
 sector_physical_write:
+    cmp byte [cur_disk],8
+    jne .floppy
+    jmp hdd_write
+.floppy:
     push ax
     push bx
     push cx
@@ -288,7 +312,7 @@ sector_floppy_chs:
     ret
 
 ; Translate current record to cache offset and segment.
-; Validated cur_sector is at most 51 (2HD).
+; Validated cur_sector is at most 63 (HDD).
 cache_record_address:
     mov bx,[cur_sector]
     mov cl,7
@@ -360,6 +384,7 @@ cur_disk db 0
 cur_track dw 0
 cur_sector dw 0
 %include "i8086/floppy.inc"
+%include "i8086/hdd.inc"
 %include "i8086/local_console.inc"
 %include "i8086/ansi_console.inc"
 times NATIVE_SLOT-($-$$) db 0

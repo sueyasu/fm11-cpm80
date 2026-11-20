@@ -6,6 +6,7 @@
 ; (128-byte record within side-track), and sector_physical_read/write.
 ; All writes use the resident 256-byte bounce buffer for DMA.
 cache_init:
+    mov byte [hdd_ready],0
     mov byte [cache_used],0
     mov byte [cache_next],0
     mov word [cache_valid],0

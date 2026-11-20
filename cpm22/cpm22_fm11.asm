@@ -1839,94 +1839,58 @@ IORET   ORA     A
 ;   Routine to select the track and sector that the desired
 ; block number falls in.
 ;
-TRKSEC  LHLD    FILEPOS         ;get position of last accessed file
-        MVI     C,2     ;in directory and compute sector #.
-        CALL    SHIFTR  ;sector #=file-position/4.
-        SHLD    BLKNMBR         ;save this as the block number of interest.
-        SHLD    CKSUMTBL;what's it doing here too?
+TRKSEC  LHLD    FILEPOS         ;directory sector = entry / 4
+        MVI     C,2
+        CALL    SHIFTR
+        SHLD    BLKNMBR
+        SHLD    CKSUMTBL
+        XRA     A
+        STA     LOGHIGH
 ;
-;   if the sector number has already been set (BLKNMBR), enter
-; at this point.
-;
-TRKSEC1         LXI     H,BLKNMBR
-        MOV     C,M     ;move sector number into (BC).
-        INX     H
-        MOV     B,M
-        LHLD    SCRATCH3;get current sector number and
-        MOV     E,M     ;move this into (DE).
-        INX     H
-        MOV     D,M
-        LHLD    SCRATCH2;get current track number.
-        MOV     A,M     ;and this into (HL).
-        INX     H
-        MOV     H,M
-        MOV     L,A
-TRKSEC2         MOV     A,C     ;is desired sector before current one?
-        SUB     E
-        MOV     A,B
-        SBB     D
-        JNC     TRKSEC3
-        PUSH    H       ;yes, decrement sectors by one track.
-        LHLD    SECTORS         ;get sectors per track.
-        MOV     A,E
-        SUB     L
-        MOV     E,A
-        MOV     A,D
-        SBB     H
-        MOV     D,A     ;now we have backed up one full track.
-        POP     H
-        DCX     H       ;adjust track counter.
-        JMP     TRKSEC2
-TRKSEC3         PUSH    H       ;desired sector is after current one.
-        LHLD    SECTORS         ;get sectors per track.
-        DAD     D       ;bump sector pointer to next track.
-        JC      TRKSEC4
-        MOV     A,C     ;is desired sector now before current one?
-        SUB     L
-        MOV     A,B
-        SBB     H
-        JC      TRKSEC4
-        XCHG            ;not yes, increment track counter
-        POP     H       ;and continue until it is.
-        INX     H
-        JMP     TRKSEC3
-;
-;   here we have determined the track number that contains the
-; desired sector.
-;
-TRKSEC4         POP     H       ;get track number (HL).
-        PUSH    B
-        PUSH    D
-        PUSH    H
-        XCHG
-        LHLD    OFFSET  ;adjust for first track offset.
-        DAD     D
+; Divide the 24-bit relative record number by SPT. All FM-11
+; DPBs have 1..127 records/track; quotient fits a 16-bit track.
+; Initialize the remainder with the top byte, then shift in the
+; sixteen low bits. BC accumulates the quotient, L the remainder.
+; This replaces the original 16-bit running sector/track cache,
+; whose sector number wrapped at 8 MiB.
+TRKSEC1 LHLD    BLKNMBR
         MOV     B,H
         MOV     C,L
-        CALL    SETTRK  ;select this track.
-        POP     D       ;reset current track pointer.
-        LHLD    SCRATCH2
-        MOV     M,E
-        INX     H
-        MOV     M,D
-        POP     D
-        LHLD    SCRATCH3;reset the first sector on this track.
-        MOV     M,E
-        INX     H
-        MOV     M,D
-        POP     B
-        MOV     A,C     ;now subtract the desired one.
-        SUB     E       ;to make it relative (1-# sectors/track).
+        LDA     LOGHIGH
+        MOV     L,A
+        LDA     SECTORS
+        MOV     D,A
+        MVI     E,16
+TRKDIV  MOV     A,C
+        ADD     A
         MOV     C,A
         MOV     A,B
-        SBB     D
+        RAL
         MOV     B,A
-        LHLD    XLATE   ;translate this sector according to this table.
+        MOV     A,L
+        RAL
+        CMP     D
+        JC      TRKBIT
+        SUB     D
+        INR     C
+TRKBIT  MOV     L,A
+        DCR     E
+        JNZ     TRKDIV
+        PUSH    H              ;save remainder across BIOS SETTRK
+        LHLD    OFFSET
+        DAD     B
+        MOV     B,H
+        MOV     C,L
+        CALL    SETTRK
+        POP     H
+        MOV     C,L
+        MVI     B,0
+        LHLD    XLATE
         XCHG
-        CALL    SECTRN  ;let the bios translate it.
+        CALL    SECTRN
         MOV     C,L
         MOV     B,H
-        JMP     SETSEC  ;and select it.
+        JMP     SETSEC
 ;
 ;   Compute block number from record number (SAVNREC) and
 ; extent number (SAVEXT).
@@ -1995,11 +1959,17 @@ CHKBLK  LHLD    BLKNMBR
 ; resulting sector number is stored back in (BLKNMBR). This
 ; will still have to be adjusted for the track number.
 ;
-LOGICAL         LDA     BLKSHFT         ;get log2(physical/logical sectors).
-        LHLD    BLKNMBR         ;get physical sector desired.
-LOGICL1         DAD     H       ;compute logical sector number.
-        DCR     A       ;note logical sectors are 128 bytes long.
+LOGICAL         LDA     BLKSHFT
+        MOV     B,A
+        MVI     C,0
+        LHLD    BLKNMBR
+LOGICL1 DAD     H
+        MOV     A,C
+        RAL
+        MOV     C,A
+        DCR     B
         JNZ     LOGICL1
+        STA     LOGHIGH         ;24-bit block base, high byte
         SHLD    LOGSECT         ;save logical sector.
         LDA     BLKMASK         ;get block mask.
         MOV     C,A
@@ -3735,7 +3705,10 @@ SAVNXT  DB      0       ;storage for next record number to access.
 SAVEXT  DB      0       ;storage for extent number of file.
 SAVNREC         DW      0       ;storage for number of records in file.
 BLKNMBR         DW      0       ;block number (physical sector) used within a file or logical sector.
-LOGSECT         DW      0       ;starting logical (128 byte) sector of block (physical sector).
+LOGSECT         DW      0       ;low word of block base record
+LOGHIGH         DB      0       ;high byte of relative record (also block base)
+; Function 40 zero-fill cannot cross a 64K-record boundary within
+; a power-of-two allocation block, so LOGHIGH stays constant.
 FCBPOS  DB      0       ;relative position within buffer for fcb of file of interest.
 FILEPOS         DW      0       ;files position within directory (0 to max entries -1).
 ;

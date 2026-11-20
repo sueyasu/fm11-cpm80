@@ -40,6 +40,8 @@ ALV4 EQU     ALV3+31
 ALV5 EQU     ALV4+31
 ALV6 EQU     ALV5+31
 ALV7 EQU     ALV6+31
+ALV8 EQU     0F600H ; 513 bytes through F800h
+HDD_ALV_END EQU 0F801H
 
         ORG     BIOSBASE
 
@@ -73,6 +75,14 @@ BOOT EQU     $
         ; CPU_INIT may clobber A/flags, but must return on this stack.
         LXI     SP,0F960H
         CALL    CPU_INIT
+        LXI     H,ALV8
+        LXI     B,513
+BOOT_ALV_CLEAR MVI M,0
+        INX     H
+        DCX     B
+        MOV     A,B
+        ORA     C
+        JNZ     BOOT_ALV_CLEAR
         MVI     A,1
         STA     0003H  ; IOBYTE: CON:=CRT selects FM-11 local console
         XRA     A
@@ -134,7 +144,7 @@ WBOOT_WBOOT_RETRY  MVI     A,MBCMD_WBOOT
 
         LDA     WBOOTINFO
         ANI     00FH
-        CPI     8
+        CPI     9
         JNC     WBOOT_WBOOT_FALLBACK
         MOV     B,A
         LDA     BOOTDRV
@@ -142,7 +152,19 @@ WBOOT_WBOOT_RETRY  MVI     A,MBCMD_WBOOT
         JZ      WBOOT_WBOOT_DRIVE_OK
         MOV     A,B
         STA     CURDRV
-        LXI     B,2  ; OFF=2 for both supported floppy formats
+        CPI     8
+        JNZ     WBOOT_FLOPPY_OFF
+        MVI     C,8
+        CALL    SELDSK
+        MOV     A,H
+        ORA     L
+        JZ      WBOOT_WBOOT_FALLBACK
+        LHLD    DPBHDD+13
+        MOV     B,H
+        MOV     C,L
+        JMP     WBOOT_SET_OFF
+WBOOT_FLOPPY_OFF LXI B,2
+WBOOT_SET_OFF EQU $
         PUSH    H
         MOV     H,B
         MOV     L,C
@@ -335,10 +357,11 @@ LISTST  MVI     A,MBCMD_SERIAL_LISTST
 HOME    LXI     B,0
         JMP     SETTRK
 
-; C = CP/M drive number 0..7. A:-D: always 2D, E:-H: always 2HD.
-; Returns HL=DPH or HL=0 if unsupported. Each DPH has a fixed DPB.
+; C = CP/M drive number 0..8. A:-D: 2D, E:-H: 2HD, I: MDC HDD.
+; HDD geometry obtained from native service; unsupported server returns error.
 SELDSK  MOV     A,C
         CPI     8
+        JZ      SELDSK_HDD
         JNC     SELDSK_BAD_DRIVE
         STA     CURDRV
         MOV     L,A
@@ -352,6 +375,24 @@ SELDSK  MOV     A,C
         XCHG      ; HL = selected DPH
         RET
 SELDSK_BAD_DRIVE  LXI     H,0
+        RET
+SELDSK_HDD MVI A,MBCMD_HDD_GEOM
+        CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     SELDSK_BAD_DRIVE
+        LDA     MBOX_TRACK_H
+        MOV     H,A
+        LDA     MBOX_TRACK_L
+        MOV     L,A
+        SHLD    DPBHDD+5
+        LDA     MBOX_SECTOR_H
+        MOV     H,A
+        LDA     MBOX_SECTOR_L
+        MOV     L,A
+        SHLD    DPBHDD+13
+        MVI     A,8
+        STA     CURDRV
+        LXI     H,DPH8
         RET
 
 SETTRK  PUSH    H
@@ -454,6 +495,8 @@ DPH5    DW      0,0,0,0,DIRBUF,DPB2HD,CSV5,ALV5
 DPH6    DW      0,0,0,0,DIRBUF,DPB2HD,CSV6,ALV6
 DPH7    DW      0,0,0,0,DIRBUF,DPB2HD,CSV7,ALV7
 
+DPH8    DW      0,0,0,0,DIRBUF,DPBHDD,0,ALV8
+
 DPHTAB  DW      DPH0,DPH1,DPH2,DPH3
         DW      DPH4,DPH5,DPH6,DPH7
 
@@ -480,6 +523,14 @@ DPB2HD  DW      104  ; SPT
         DB      00H  ; AL1
         DW      32  ; CKS
         DW      2  ; OFF
+
+DPBHDD  DW      64
+        DB      7,127,7
+        DW      0       ; DSM resolved by SELDSK
+        DW      511
+        DB      080H,0
+        DW      0       ; fixed HDD, no checksum vector
+        DW      0       ; OFF resolved by SELDSK
 
 CURDRV  DB      0
 CURTRK  DW      0

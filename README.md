@@ -33,6 +33,12 @@ cpmls -f fm11-cpm80-2hd build/images/fm11-cpm80-2hd.raw
 The same definitions apply to the 8088+Z80 and V20 RAW images.
 They do not apply directly to D88 files.
 
+## HDD data drive (8088+Z80 and V20)
+
+I: maps to one whole MDC HDD, with the same filesystem layout as CP/M-86.
+See [docs/hdd-data.md](docs/hdd-data.md). HDD boot and 6809 HDD transport
+are not yet available.
+
 ## Boot drive and SUBMIT
 
 BDOS function 13 resets the disk system on the actual boot drive; CCP reads

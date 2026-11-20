@@ -34,3 +34,103 @@ diskdef fm11-cpm80-2hd
   skew 0
   os 2.2
 end
+
+# Whole MDC HDD, 256-byte sectors, 16 KiB blocks, first cylinder reserved.
+diskdef fm11-cpm80-m2230b
+  seclen 256
+  tracks 630
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 2
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2231b
+  seclen 256
+  tracks 628
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 4
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2232b
+  seclen 256
+  tracks 942
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 6
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2233b
+  seclen 256
+  tracks 1260
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 4
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2234b
+  seclen 256
+  tracks 1890
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 6
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2235b
+  seclen 256
+  tracks 2520
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 8
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2241b
+  seclen 256
+  tracks 2988
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 4
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2242b
+  seclen 256
+  tracks 5229
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 7
+  skew 0
+  os 2.2
+end
+
+diskdef fm11-cpm80-m2243b
+  seclen 256
+  tracks 8217
+  sectrk 32
+  blocksize 16384
+  maxdir 512
+  boottrk 11
+  skew 0
+  os 2.2
+end
