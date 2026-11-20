@@ -1,4 +1,4 @@
-; Common mailbox ABI (logical addresses in shared physical bank zero).
+; Common mailbox ABI (logical addresses in shared CP/M segment (physical bank one on 8088+Z80)).
 BOOTDRV equ 0xfbf4
 BOOTTYPE equ 0xfbf5
 MBOX_CMD equ 0xfbf6

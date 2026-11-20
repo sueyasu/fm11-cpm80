@@ -21,10 +21,11 @@ Keeping the trampoline in fixed CPU-card SRAM means the CPU-switch point does no
 
 The common 8080 CBIOS (`cpm22/bios/bios.asm`) uses the mailbox definitions
 in `include/8080/mailbox.inc`. All CPU-specific operations are implemented
-by `cpm22/bios/cpu_z80.asm` for the current Z80 target.
+by `cpm22/bios/cpu_z80.asm` (CPU_IOCALL) and the target-specific
+`init_z80_6809.asm` / `init_z80_8088.asm` (CPU_INIT).
 
 - `CPU_INIT`: called once on cold boot after the common stack is set up.
-  Initializes target CPU state (Z80 bank zero); not called on WBOOT.
+  Selects Z80 bank 0 for 6809 or bank 1 for 8088; not called on WBOOT.
 - `CPU_IOCALL`: called with a complete mailbox request already posted.
   Returns only after native service completion. The main CPU may be 6809
   or 8088 when using a Z80 card; a future V20 backend can instead use CALLN.

@@ -1,17 +1,18 @@
 ; FM-11 8088+Z80 native mailbox server. 8086 instruction set only.
-; CS=1000h, AL=boot drive (0 or 4). DS=CS, ES=0 for shared CP/M RAM.
+; CS=0400h, AL=boot drive (0 or 4). DS=CS, ES=1000h for shared CP/M RAM.
 cpu 8086
 bits 16
 org 0
+%include "i8086/memory.inc"
 %include "i8086/mailbox.inc"
 
 start:
     cli
     mov dx,cs
     mov ss,dx
-    mov sp,0x2000
+    mov sp,NATIVE_STACK_TOP
     mov ds,dx
-    xor dx,dx
+    mov dx,CPM_SEG
     mov es,dx
     cld
     mov [boot_drive],al
@@ -42,7 +43,7 @@ start:
     call diagnostic
 
 ; The 8088 remains stopped at the OUT until the Z80 posts its next request.
-; Unlike 6809 the native server can execute directly in private high RAM.
+; Unlike 6809 the native server can execute directly in private bank-zero RAM.
 handoff:
     mov dx,0xfd05
     mov al,1
@@ -156,7 +157,7 @@ finish_ok:
     jmp handoff
 
 ; Read CYL 1, sequential sectors, split at side boundary on 2D.
-; CX = 26 cold / 22 warm. Copy 256 bytes to common bank 0 per transfer.
+; CX = 26 cold / 22 warm. Copy 256 bytes to shared CP/M bank 1 per transfer.
 reload_system:
     mov di,0xdc00
     mov word [load_position],0x0101
@@ -244,8 +245,8 @@ decode_request:
     stc
     ret
 
-; Single-cylinder write-through cache: 52 sectors at physical 12000h.
-; DS=1000h, use temporary ES=1200h only while copying cache data.
+; Single-cylinder write-through cache: 52 sectors at physical 06000h.
+; DS=NATIVE_SEG, temporarily select CACHE_SEG while copying cache data.
 ; A miss fills just the requested sector. Never cache failed transfers.
 read_physical:
     call decode_request
@@ -283,7 +284,7 @@ read_physical:
     push es
     push cs
     pop es
-    mov ax,0x1200
+    mov ax,CACHE_SEG
     mov ds,ax
     mov si,bx
     mov cl,8
@@ -308,7 +309,7 @@ read_physical:
 
 cache_store:
     push es
-    mov ax,0x1200
+    mov ax,CACHE_SEG
     mov es,ax
     xor bx,bx
     mov bl,[request_index]
@@ -339,10 +340,11 @@ write_record:
     jc .done
     push ds
     push es
-    push ds
+    ; Source is CP/M RAM in bank 1; destination is the native bounce buffer.
+    push es
+    pop ds
+    push cs
     pop es
-    xor ax,ax
-    mov ds,ax
     mov si,[es:request_dma]
     mov di,[es:half_offset]
     add di,fdc2d_buffer
@@ -395,4 +397,4 @@ cache_map times 52 db 0
 %include "i8086/floppy.inc"
 %include "i8086/local_console.inc"
 %include "i8086/ansi_console.inc"
-times 0x1800-($-$$) db 0
+times NATIVE_SLOT-($-$$) db 0

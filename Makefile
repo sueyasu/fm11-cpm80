@@ -39,9 +39,11 @@ bios: $(Z80_BUILD)/bios.bin
 
 BIOS_COMMON := include/8080/mailbox.inc cpm22/bios/bios.asm
 BIOS_Z80    := include/z80/fm11.inc cpm22/bios/cpu_z80.asm
+BIOS_INIT_6809 := cpm22/bios/init_z80_6809.asm
+BIOS_INIT_8088 := cpm22/bios/init_z80_8088.asm
 
-$(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) Makefile | $(Z80_BUILD)
-	cat include/8080/mailbox.inc include/z80/fm11.inc cpm22/bios/bios.asm cpm22/bios/cpu_z80.asm > $(Z80_BUILD)/bios.asm
+$(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) $(BIOS_INIT_6809) Makefile | $(Z80_BUILD)
+	cat include/8080/mailbox.inc include/z80/fm11.inc cpm22/bios/bios.asm $(BIOS_INIT_6809) cpm22/bios/cpu_z80.asm > $(Z80_BUILD)/bios.asm
 	$(ASM8080) $(Z80_BUILD)/bios.asm -o$(basename $@)
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x400 --name "CP/M 2.2 BIOS (F200-F5FF)"
 
@@ -110,7 +112,9 @@ clean:
 # Experimental 8088+Z80 builds; default 6809 builds are unchanged.
 NASM ?= nasm
 I8086_BUILD := $(BUILD)/i8086
-.PHONY: image8088 image8088-2d image8088-2hd ioserver8088 ipl8088
+.PHONY: image8088 image8088-2d image8088-2hd ioserver8088 ipl8088 bios8088 system8088
+bios8088: $(I8086_BUILD)/bios.bin
+system8088: $(I8086_BUILD)/system62.bin
 image8088: image8088-2d image8088-2hd
 ioserver8088: $(I8086_BUILD)/ioserver.bin
 ipl8088: $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/ipl_2hd.bin
@@ -118,18 +122,26 @@ ipl8088: $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/ipl_2hd.bin
 $(I8086_BUILD):
 	mkdir -p $@
 
-$(I8086_BUILD)/ioserver.bin: i8086/ioserver.asm $(wildcard i8086/*.inc) | $(I8086_BUILD)
+$(I8086_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) $(BIOS_INIT_8088) Makefile | $(I8086_BUILD)
+	cat include/8080/mailbox.inc include/z80/fm11.inc cpm22/bios/bios.asm $(BIOS_INIT_8088) cpm22/bios/cpu_z80.asm > $(I8086_BUILD)/bios.asm
+	$(ASM8080) $(I8086_BUILD)/bios.asm -o$(basename $@)
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x400 --name "8088+Z80 BIOS"
+
+$(I8086_BUILD)/system62.bin: $(CPM22_CORE) $(I8086_BUILD)/bios.bin tools/mksystem.py | $(I8086_BUILD)
+	$(PYTHON) tools/mksystem.py --core $(CPM22_CORE) --bios $(I8086_BUILD)/bios.bin --output $@
+
+$(I8086_BUILD)/ioserver.bin: i8086/ioserver.asm $(wildcard i8086/*.inc) Makefile | $(I8086_BUILD)
 	$(NASM) -f bin -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "8088 I/O server"
 
-$(I8086_BUILD)/ipl_%.bin: i8086/ipl_%.asm | $(I8086_BUILD)
+$(I8086_BUILD)/ipl_%.bin: i8086/ipl_%.asm i8086/memory.inc Makefile | $(I8086_BUILD)
 	$(NASM) -f bin -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "8088 IPL"
 
 image8088-2d: $(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88
-$(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88: $(I8086_BUILD)/ipl_2d.bin $(CPM_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
-	$(PYTHON) tools/mk2d_d88.py --ipl $(I8086_BUILD)/ipl_2d.bin --system $(CPM_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2d.raw --label "FM11 CPM80 8088"
+$(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88: $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2d_d88.py --ipl $(I8086_BUILD)/ipl_2d.bin --system $(I8086_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2d.raw --label "FM11 CPM80 8088"
 
 image8088-2hd: $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88
-$(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88: $(I8086_BUILD)/ipl_2hd.bin $(CPM_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
-	$(PYTHON) tools/mk2hd_d88.py --ipl $(I8086_BUILD)/ipl_2hd.bin --system $(CPM_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.raw --label "FM11 CPM80 8088"
+$(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88: $(I8086_BUILD)/ipl_2hd.bin $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2hd_d88.py --ipl $(I8086_BUILD)/ipl_2hd.bin --system $(I8086_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.raw --label "FM11 CPM80 8088"

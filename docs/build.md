@@ -9,8 +9,8 @@
 
 The common CBIOS uses only Intel 8080 instructions. The current target is
 6809+Z80. The build concatenates `include/8080/mailbox.inc`,
-`include/z80/fm11.inc`, `cpm22/bios/bios.asm`, and
-`cpm22/bios/cpu_z80.asm` into `build/z80/bios.asm` before assembly.
+`include/z80/fm11.inc`, `cpm22/bios/bios.asm`,
+`cpm22/bios/init_z80_6809.asm`, and `cpm22/bios/cpu_z80.asm` into `build/z80/bios.asm` before assembly.
 The common BIOS has no direct hardware register access. No z80asm is required.
 See [io-protocol.md](io-protocol.md) for the CPU hook contract.
 

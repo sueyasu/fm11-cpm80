@@ -1,8 +1,9 @@
 ; FM-11 8088+Z80 IPL, adapted from fm11-cpm86 8f094f9 (MIT).
-; ROM enters 07C0:0000. Load native server at physical 10000h.
+; ROM enters 07C0:0000. Load native server at physical 04000h.
 cpu 8086
 bits 16
 org 0
+%include "i8086/memory.inc"
 
 SER_STATUS equ 0xFD07
 SER_DATA   equ 0xFD06
@@ -65,7 +66,7 @@ boot:
     mov ds,ax
     mov al,'R'
     call putc
-    xor bx,bx                ; DMA offset within physical bank 1
+    mov bx,NATIVE_PHYS       ; DMA destination in physical bank zero
     xor bp,bp                 ; cylinder
     xor di,di                 ; C0/H0 128-byte sectors
     mov si,5                ; skip ROM-loaded IPL
@@ -83,7 +84,7 @@ boot:
     jz .advanced
     add bx,128
 .advanced:
-    cmp bx,0x1800
+    cmp bx,NATIVE_PHYS+NATIVE_SLOT
     je loaded
     inc si
     cmp si,27
@@ -100,7 +101,7 @@ loaded:
     mov al,'J'
     call putc
     mov al,4                 ; fixed CP/M boot drive
-    jmp 0x1000:0x0000
+    jmp NATIVE_SEG:0x0000
 
 halt:
     cli
@@ -132,7 +133,7 @@ putc:
     pop ax
     ret
 
-; BX=DMA destination (bank 1); BP=cylinder; DI=head; SI=sector.
+; BX=DMA destination (bank 0); BP=cylinder; DI=head; SI=sector.
 ; Preserves BX/BP/DI/SI, clobbers AX/CX/DX.
 ; Return CF=0 only when FDC succeeded and DMA terminal count asserted.
 read256:
@@ -161,7 +162,7 @@ read256:
     xor al,al
     out dx,al
     mov dx,DMA_BANK
-    mov al,1
+    xor al,al
     out dx,al
     mov dx,DMA_MODE
     mov al,0x45              ; channel 1, I/O to RAM
