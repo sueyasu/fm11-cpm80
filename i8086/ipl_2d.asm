@@ -6,7 +6,6 @@ org 0
 %include "i8086/memory.inc"
 
 SER_STATUS equ 0xFD07
-SER_DATA   equ 0xFD06
 DMA_ADDR   equ 0x10
 DMA_COUNT  equ 0x11
 DMA_TC     equ 0x18
@@ -26,7 +25,7 @@ relocate:
     cli
     xor ax,ax
     mov ss,ax
-    mov sp,0x9000             ; establish stack BEFORE calling putc
+    mov sp,0x9000             ; private IPL stack
     push cs
     pop ds
     mov dx,SER_STATUS
@@ -50,8 +49,6 @@ relocate:
     mov al,0x37               ; DTR and TxEN asserted
     out dx,al
 .serial_ready:
-    mov al,'I'
-    call putc
     mov ax,0x0100
     mov es,ax
     xor si,si
@@ -64,21 +61,13 @@ relocate:
 boot:
     xor ax,ax
     mov ds,ax
-    mov al,'R'
-    call putc
     mov bx,NATIVE_PHYS       ; DMA destination in physical bank zero
     xor bp,bp                 ; cylinder
     xor di,di                 ; head
     mov si,3                  ; physical sector 3, after 512-byte IPL
 .loop:
     call read256
-    jnc .read_ok
-    mov al,'E'
-    call putc
-    jmp halt
-.read_ok:
-    mov al,'.'
-    call putc
+    jc halt
     add bx,256
     cmp bx,NATIVE_PHYS+NATIVE_SLOT             ; 24 sectors, server slot
     je loaded
@@ -94,8 +83,6 @@ boot:
     jmp .loop
 
 loaded:
-    mov al,'J'
-    call putc
     mov al,0                 ; fixed CP/M boot drive
     jmp NATIVE_SEG:0x0000
 
@@ -104,30 +91,6 @@ halt:
 .again:
     hlt
     jmp .again
-
-; Serial output does not disturb the load loop's registers.
-putc:
-    push ax
-    push cx
-    push dx
-    mov ah,al
-    mov dx,SER_STATUS
-    mov cx,0xFFFF              ; no indefinite loop if TXRDY stays low
-.wait:
-    in al,dx
-    test al,1
-    jnz .ready
-    loop .wait
-    jmp .done                  ; no serial connection or USART failure
-.ready:
-    mov dx,SER_DATA
-    mov al,ah
-    out dx,al
-.done:
-    pop dx
-    pop cx
-    pop ax
-    ret
 
 ; BX=DMA destination (bank 0); BP=cylinder; DI=head; SI=sector.
 ; Preserves BX/BP/DI/SI, clobbers AX/CX/DX.

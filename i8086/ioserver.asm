@@ -348,25 +348,6 @@ write_record:
 
 %include "i8086/track_cache.inc"
 
-diagnostic:
-    push ax
-    mov ah,al
-    mov dx,0xfd07
-    mov cx,0xffff
-.wait:
-    in al,dx
-    test al,1
-    jnz .send
-    loop .wait
-    jmp .done
-.send:
-    dec dx
-    mov al,ah
-    out dx,al
-.done:
-    pop ax
-    ret
-
 boot_drive db 0
 load_position dw 0
 load_head db 0

@@ -13,8 +13,6 @@ start:
     cld
     call server_cold_init
     jnc .loaded
-    mov al,'E'
-    call diagnostic
 .stop:
     hlt
     jmp .stop
@@ -23,8 +21,6 @@ start:
     mov byte [es:0],0xc3
     mov word [es:1],0xf200
     mov word [es:3],0
-    mov al,'Z'
-    call diagnostic
 
 ; The OUT suspends the 8088 until the Z80 posts a request and yields.
 ; Keep the suspended native stack independent of CP/M's Z80 stack.
