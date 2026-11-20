@@ -1,6 +1,6 @@
 # CP/M-80 v2.2 for Fujitsu FM-11
 
-富士通FM-11向けのCP/M-80（CP/M 2.2）移植です。2D／2HDの起動用FDイメージおよびHDDイメージを、リポジトリ内のソースから生成できます。CCP/BDOSはPC-9801用CP/M-80をベースとしており、外部のコアバイナリは必要ありません。
+富士通FM-11向けのCP/M-80（CP/M 2.2）移植です。2D／2HDの起動用FDイメージおよびHDDイメージを、リポジトリ内のソースから生成できます。
 
 ## 動作環境
 
@@ -26,7 +26,7 @@ V20構成ではZ80カードは不要です。RAMは128 KiB以上を必要とし�
 
 HDDはM2230B、M2231B、M2232B、M2233B、M2234B、M2235B、M2241B、M2242B、M2243Bに対応します。区画管理は行わず、HDD全体をCP/M用として利用します。BDOSのディスク相対レコード番号を24ビットに拡張し、8 MiBを超える領域へのアクセスに対応しています。
 
-すべての構成でFM-11の標準ブートROMを使用します。専用ブートROMは不要です。[FM-11エミュレータ](https://github.com/sueyasu/fm11-emulator)で動作を確認していますが、実機での全構成・全モデルの動作は未確認です。
+[FM-11エミュレータ](https://github.com/sueyasu/fm11-emulator)で動作を確認していますが、実機での全構成・全モデルの動作は未確認です。
 
 ## ビルド
 
@@ -46,7 +46,7 @@ make image8088-hdd HDD_MODEL=m2233b
 make imagev20-hdd HDD_MODEL=m2233b
 ```
 
-既存のHDDイメージは上書きしません。標準コマンドなどのCOMファイルは `external/commands/` に用意すると、イメージの生成時にユーザー領域0へ収録されます。
+既存のHDDイメージは上書きしません。標準コマンドなどのCOMファイルは `external/commands/` に用意すると、イメージの生成時にユーザー領域0に収録されます。
 
 詳しい手順は [docs/build.md](docs/build.md)、[docs/8088-z80.md](docs/8088-z80.md)、[docs/v20.md](docs/v20.md)、[docs/boot-hdd.md](docs/boot-hdd.md) を参照してください。
 
@@ -74,9 +74,9 @@ CRT:はローカルコンソール、TTY:はシリアル端末、UC1:は両方�
 
 ウォームブート時にディスクI/Oやキャッシュの書き戻しに失敗した場合は、再試行が続きプロンプトに戻らないことがあります。強制的な再起動によって未書き戻しデータが失われる可能性があるため、再起動後はディスクの内容を確認してください。
 
-SUBMITを使用するときは起動ドライブ上で実行してください。CCPは起動ドライブ上のバッチファイルを処理します。例えばE:から起動した環境では、`E>SUBMIT A:TEST` のように指定できます。
+SUBMITを使用するときは起動ドライブ上で実行してください。CCPは起動ドライブ上のバッチファイル（$$$.SUB）を処理します。例えばE:から起動した環境では、`E>SUBMIT A:TEST` のように指定できます。
 
-標準CP/Mのユーティリティには大容量HDDを正しく扱えないものがあります。STAT.COMの一部の版ではM2243Bの空き容量表示が桁あふれします。詳細は [docs/hdd-data.md](docs/hdd-data.md) を参照してください。
+標準CP/Mのユーティリティには大容量HDDを正しく扱えないものがあります。例えば、標準のSTAT.COMではM2243Bの空き容量表示が桁あふれします。詳細は [docs/hdd-data.md](docs/hdd-data.md) を参照してください。
 
 ## FORMAT.COM
 
@@ -109,19 +109,11 @@ I:とHDDは同じ対象です。オプションなしでは予約シリンダと
 
 **FORMATを実行すると対象ディスク上の既存ファイルは失われます。** 実行前に対象ドライブを確認し、必要なデータのバックアップを取ってください。
 
-```sh
-make format
-mkdir -p external/commands
-cp build/format/FORMAT.COM external/commands/
-```
-
 FORMAT.COMの作成にはlwasmとNASMの両方が必要です。詳しくは [docs/FORMAT.md](docs/FORMAT.md) を参照してください。
 
 ## 利用ライセンス
 
 自作部分（ブートコード、CBIOS、ネイティブI/Oサーバーおよび付属ユーティリティ）はMITライセンスを採用しています（[LICENSE](LICENSE)）。CP/MのCCP/BDOSおよびその派生部分のライセンスについては [LICENSE.CPM](LICENSE.CPM) を参照してください。
-
-CP/M 2.2の改変CCP/BDOSソースを収録しています。富士通のオリジナルディスクイメージ、標準ブートROMおよび外部標準コマンドのバイナリはソースリポジトリに収録していません。
 
 ## diskdefs
 
