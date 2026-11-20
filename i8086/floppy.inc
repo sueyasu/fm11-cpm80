@@ -1,9 +1,11 @@
 ; 8237/FDC transport adapted from fm11-cpm86 8f094f9 (MIT).
 fdc2d_read:
+    mov byte [fdc_raw],0
     mov ah,0x44              ; CH0, single, I/O -> memory
     jmp fdc2d_transfer
 
 fdc2d_write:
+    mov byte [fdc_raw],0
     mov ah,0x48              ; CH0, single, memory -> I/O
 
 fdc2d_transfer:
@@ -44,6 +46,9 @@ fdc2d_transfer:
     jmp .bad               ; 8086 conditional branches have 8-bit reach
 .validated:
     mov byte [fdc_attempts],10
+    cmp byte [fdc_raw],0
+    je .retry
+    mov byte [fdc_attempts],1 ; no retry of destructive raw operations
 .retry:
     ; The polling loop consumes CX; keep the original cylinder/sector.
     push cx
@@ -78,6 +83,14 @@ fdc2d_transfer:
     jnc .positioned
     ret
 .positioned:
+    cmp byte [fdc_raw],0
+    je .private_dma
+    mov si,[raw_dma]
+    mov di,CPM_SEG/0x1000
+    mov ax,[raw_length]
+    dec ax
+    jmp .dma_count_ready
+.private_dma:
     ; Convert the real-mode CS:offset into an 8237 bank:offset address.
     ; 256-byte transfer must not cross a 64 KiB DMA page boundary.
     mov ax,cs
@@ -92,6 +105,9 @@ fdc2d_transfer:
 .dma_ok:
     mov si,ax                ; 16-bit DMA address
     mov di,dx                ; DMA bank (bits 16..19)
+    mov ax,255
+.dma_count_ready:
+    push ax
 
     mov dx,0x1c             ; reset 8237 address/count flip-flop
     xor al,al
@@ -112,9 +128,9 @@ fdc2d_transfer:
     je .count_port
     mov dl,0x13
 .count_port:
-    mov al,0xff
+    pop ax
     out dx,al
-    xor al,al
+    mov al,ah
     out dx,al
 
     mov dx,0x20             ; CH0 bank=20h, CH1 bank=21h
@@ -168,6 +184,10 @@ fdc2d_transfer:
     je .start
     mov al,0xa0
 .start:
+    cmp byte [fdc_raw],0
+    je .issue
+    mov al,[raw_fdc_command]
+.issue:
     out dx,al
 
     ; Poll until FDC no longer indicates a transfer in progress.
@@ -318,6 +338,7 @@ fdc_forget_all:
     ret
 
 
+fdc_raw db 0
 fdc_channel db 0
 fdc_attempts db 0
 fdc_cylinder: times 8 db 0xff

@@ -83,6 +83,13 @@ server_dispatch:
     call hdd_geometry
     jmp finish
 .not_geometry:
+    cmp al,MBCMD_RAW_GEOM
+    jb .not_raw
+    cmp al,MBCMD_CPU_TYPE
+    ja .not_raw
+    call raw_service
+    jmp finish
+.not_raw:
     cmp al,0x10
     jne .not_lconst
     call local_const
@@ -277,8 +284,8 @@ decode_request:
     inc bx
     jmp .first_side
 .hdd:
-    cmp byte [hdd_ready],1
-    jne .bad
+    call hdd_ensure_ready
+    jc .bad
     cmp bx,[hdd_total_tracks]
     jae .bad
     mov ax,[es:MBOX_SECTOR]
@@ -409,6 +416,7 @@ write_record:
     ret
 
 %include "i8086/track_cache.inc"
+%include "i8086/raw_disk.inc"
 
 boot_drive db 0
 load_position dw 0

@@ -146,3 +146,9 @@ DMA2_COUNT_H    equ     $FD4A
 DMA2_COUNT_L    equ     $FD4B
 DMA2_MODE       equ     $FD52
 DMA2_BANK       equ     $FD96
+
+MBCMD_RAW_GEOM equ $07
+MBCMD_RAW_READ equ $08
+MBCMD_RAW_WRITE equ $09
+MBCMD_RAW_FORMAT equ $0a
+MBCMD_CPU_TYPE equ $0b

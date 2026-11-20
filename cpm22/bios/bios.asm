@@ -66,6 +66,7 @@ HDD_ALV_END EQU 0F801H
         ; FM-11 extensions (BIOSBASE+33H / +36H); standard 17 unchanged.
         JMP     CACHE_SYNC
         JMP     CACHE_RESET
+        JMP     RAW_DISK_API  ; F239h: A=07h..0Bh, fields in mailbox
 
 ; ----------------------------------------------------------------------
 ; BOOT / WBOOT
@@ -440,6 +441,14 @@ CACHE_SYNC  MVI     A,MBCMD_CACHE_SYNC
         JMP     MBOX_SIMPLE
 CACHE_RESET  MVI     A,MBCMD_CACHE_RESET
         JMP     MBOX_SIMPLE
+
+RAW_DISK_API CPI     MBCMD_RAW_GEOM
+        JC      RAW_API_BAD
+        CPI     MBCMD_CPU_TYPE+1
+        JC      MBOX_SIMPLE
+RAW_API_BAD MVI A,1
+        ORA     A
+        RET
 
 DISK_CALL  STA     MBOX_CMD
         XRA     A

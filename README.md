@@ -59,3 +59,5 @@ input file's drive if necessary (e.g. `E>SUBMIT A:TEST`).
 
 Original FM-11-specific code is covered by LICENSE; CP/M core by LICENSE.CPM.
 Original Fujitsu reference disk images are not distributed.
+
+Physical disk utility API: [docs/format-api.md](docs/format-api.md).

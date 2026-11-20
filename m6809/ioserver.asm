@@ -38,6 +38,7 @@ IoServerStart
         lds     #IOSERVER_STACK_TOP
         sta     BOOTTYPE
         clr     HddReady
+        clr     HddRaw
         lsla
         lsla
         sta     BOOTDRV
@@ -114,6 +115,11 @@ ServiceLoop
         lbeq    ServiceCacheReset
         cmpb    #MBCMD_HDD_GEOM
         lbeq    ServiceHddGeometry
+        cmpb    #MBCMD_RAW_GEOM
+        blo     ServiceNotRaw
+        cmpb    #MBCMD_CPU_TYPE
+        lbls    ServiceRaw
+ServiceNotRaw
         cmpb    #MBCMD_LOCAL_CONST
         lbeq    ServiceLocalConst
         cmpb    #MBCMD_LOCAL_CONIN
@@ -182,6 +188,11 @@ SwLoad
 SwOK
         clr     MBOX_STATUS
         lbra    ServiceDone
+
+ServiceRaw
+        lbsr    RawService
+        lbcs    ServiceBad
+        lbra    ServiceCacheOK
 
 ServiceHddGeometry
         lbsr    HddGeometry
@@ -1174,6 +1185,7 @@ CwhBad
         rts
 
         include "hdd.inc"
+        include "raw_disk.inc"
 
 TrampolineTemplate
         lda     #$01
@@ -1226,6 +1238,13 @@ CacheIndex      rmb     1
 CacheValidMap   rmb     8       * two 32-bit maps
 CacheDirtyMap   rmb     8
 CacheFlushSlot  rmb     1
+RawOp           rmb     1
+RawN            rmb     1
+RawHeads        rmb     1
+RawSpt          rmb     1
+RawTracks       rmb     2
+RawLength       rmb     2
+HddRaw          rmb     1
 HddReady        rmb     1
 HddHeads        rmb     1
 HddTotalTracks  rmb     2

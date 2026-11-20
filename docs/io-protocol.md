@@ -137,3 +137,9 @@ The 6809 service owns:
 - DMA transfer and error handling
 - local console and USART0 initialization / serial I/O
 - CPU hand-off through the fixed-SRAM trampoline
+
+## Physical disk extension
+
+RAW_DISK_API at BIOS+39h (F239h), operations 07h..0Bh. See
+[format-api.md](format-api.md) for the physical address, length, and
+cache contract.

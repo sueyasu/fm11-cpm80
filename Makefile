@@ -47,7 +47,7 @@ $(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) $(BIOS_INIT_6809) Makefile | $
 
 ioserver: $(M6809_BUILD)/ioserver.bin
 
-$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc m6809/track_cache.inc m6809/hdd.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
+$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc m6809/track_cache.inc m6809/hdd.inc m6809/raw_disk.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 -I m6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "6809 I/O server disk slot (logical D000-E7FF, physical 10000-117FF)"
 
@@ -240,3 +240,7 @@ imagehdd: $(M6809_BUILD)/ipl_hdd.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/io
 	$(PYTHON) tools/mk_hdd_boot.py --cpu 6809 --model $(HDD_MODEL) --ipl $(M6809_BUILD)/ipl_hdd.bin --server $(M6809_BUILD)/ioserver.bin --system $(CPM_BUILD)/system62.bin --commands $(COMMANDS_DIR) $(HDD_6809_IMAGE)
 test-hdd-6809: $(M6809_BUILD)/ipl_hdd.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin
 	PYTHONPATH=tools $(PYTHON) tests/check_hdd_6809.py $(M6809_BUILD) $(CPM_BUILD)
+
+.PHONY: test-raw-api
+test-raw-api: bios bios8088 biosv20 ioserver ioserver8088 ioserverv20
+	$(PYTHON) tests/check_raw_api.py $(Z80_BUILD)/bios.bin $(I8086_BUILD)/bios.bin $(V20_BUILD)/bios.bin

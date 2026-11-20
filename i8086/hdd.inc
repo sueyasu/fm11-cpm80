@@ -299,13 +299,20 @@ hdd_result: times 10 db 0
 
 ; Return geometry in the existing big-endian mailbox word fields.
 ; Cache successful SENSE until CACHE_RESET/WBOOT, not failures.
-hdd_geometry:
+hdd_ensure_ready:
     cmp byte [hdd_ready],0
-    jne .publish
+    jne .ready
     call hdd_sense
     jc .done
     mov byte [hdd_ready],1
-.publish:
+.ready:
+    clc
+.done:
+    ret
+
+hdd_geometry:
+    call hdd_ensure_ready
+    jc .done
     mov ax,[hdd_dsm]
     xchg al,ah
     mov [es:MBOX_TRACK],ax

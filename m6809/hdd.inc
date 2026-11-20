@@ -112,7 +112,7 @@ HddTransfer
         pshs    d,x,y,u
         pshs    d
         lbsr    HddEnsure
-        bcs     HddTransferBad
+        lbcs    HddTransferBad
         * Compute side-track * 32 + physical sector - 1 (24 bits).
         lda     PhysSide
         ldb     PhysTrack
@@ -130,10 +130,18 @@ HddShift
         orb     HddLba+2
         stb     HddLba+2
         clr     DMA2_MODE
+        tst     HddRaw
+        beq     HddPrivate
+        ldd     MBOX_DMA_H
+        std     DMA2_ADDR_H
+        clr     DMA2_BANK
+        bra     HddDmaCount
+HddPrivate
         ldd     #PhysBuf+IOSERVER_PHYS_DELTA
         std     DMA2_ADDR_H
         lda     #1
         sta     DMA2_BANK
+HddDmaCount
         ldd     #$0100
         std     DMA2_COUNT_H
         lda     #$20
