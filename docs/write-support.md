@@ -23,7 +23,9 @@ The 6809 I/O server maintains independent cylinder positions for the four Mini F
 ## Cache synchronization
 
 Both CPU configurations expose CACHE_SYNC (F233h) and CACHE_RESET (F236h).
-The former is a no-op under the current write-through policy; the latter
-also clears cache and saved cylinder positions. Both report A/Z status.
+The former is a no-op on the 6809 write-through server; the 8086 server
+flushes two write-back windows. The latter clears cache and saved cylinder
+positions after successful synchronization. Both report A/Z status.
 See [I/O protocol](io-protocol.md) for the calling contract and media-change
-rules. Write-back is not enabled by this change.
+rules. The 8086 cache uses CP/M-86's side-track algorithm; see
+[8088 target](8088-z80.md). The 6809 cache is unchanged.

@@ -21,7 +21,7 @@ server_cold_init:
     mov cl,2
     shr al,cl
     mov [es:BOOTTYPE],al
-    call fdc_forget_all
+    call cache_init
     mov cx,26
     call reload_system
     jc .done
@@ -194,9 +194,10 @@ reload_system:
 .bad:
     ret
 
-; Validate and decode the CP/M cylinder and 128-byte record number.
-; Outputs AL=drive, CH=cylinder, CL=physical sector, DH=head.
-; Store half offset, DMA address and physical index for cache/copy.
+; Convert mailbox cylinder/record into CP/M-86 cache coordinates.
+; Validate all fields before touching the cache or the FDC.
+; cur_track = cylinder*2 + side; cur_sector = record within one side.
+; Mailbox and DPBs retain their existing cylinder-based geometry.
 decode_request:
     mov ax,[es:MBOX_DMA]
     xchg al,ah
@@ -209,183 +210,143 @@ decode_request:
     mov al,[es:MBOX_DRIVE]
     cmp al,8
     jae .bad
-    mov dl,16
+    mov [cur_disk],al
+    mov dx,32             ; logical records per 2D side
     cmp al,4
     jae .hd
     cmp bx,40
     jae .bad
     jmp .geometry
 .hd:
-    mov dl,26
+    mov dx,52             ; logical records per 2HD side
     cmp bx,77
     jae .bad
 .geometry:
-    mov ch,bl
+    shl bx,1              ; cylinder -> even side-track
     mov ax,[es:MBOX_SECTOR]
     xchg al,ah
-    xor dh,dh
-    mov bx,dx
-    shl bx,1
-    shl bx,1
-    cmp ax,bx
+    cmp ax,dx
+    jb .first_side
+    sub ax,dx
+    cmp ax,dx
     jae .bad
-    mov bx,ax
-    and bx,1
+    inc bx
+.first_side:
+    mov [cur_track],bx
+    mov [cur_sector],ax
+    clc
+    ret
+.bad:
+    stc
+    ret
+
+; CP/M-86-compatible cache transport adapter. FDC needs CH=cylinder,
+; CL=1-based physical sector, DH=head, AL=logical drive.
+; Preserve registers so eviction restores the original request.
+sector_physical_read:
+    push ax
+    push bx
+    push cx
+    push dx
+    call sector_floppy_chs
+    call fdc2d_read
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+sector_physical_write:
+    push ax
+    push bx
+    push cx
+    push dx
+    call sector_floppy_chs
+    call fdc2d_write
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+sector_floppy_chs:
+    mov bx,[cur_track]
+    mov dx,bx
+    and dl,1
+    mov dh,dl
+    shr bx,1
+    mov ch,bl
+    mov bx,[cur_sector]
+    mov cl,bl
+    shr cl,1
+    inc cl
+    mov al,[cur_disk]
+    ret
+
+; Translate current record to cache offset and segment.
+; Validated cur_sector is at most 51 (2HD).
+cache_record_address:
+    mov bx,[cur_sector]
     mov cl,7
     shl bx,cl
-    mov [half_offset],bx
-    shr ax,1
-    mov [request_index],al
-    xor dh,dh
-    cmp al,dl
-    jb .head
-    sub al,dl
-    inc dh
-.head:
-    inc al
-    mov cl,al
-    mov al,[es:MBOX_DRIVE]
-    clc
-    ret
-.bad:
-    stc
-    ret
-
-; Write-through: all successful writes are already on disk.
-; Write-back will replace this routine without changing its CF contract.
-cache_flush_all:
-    clc
-    ret
-
-; Flush before invalidating data or hardware position state.
-cache_reset:
-    call cache_flush_all
-    jc .done
-    mov byte [cache_valid],0
-    call fdc_forget_all
-    clc
-.done:
-    ret
-
-; Single-cylinder write-through cache: 52 sectors at physical 06000h.
-; DS=NATIVE_SEG, temporarily select CACHE_SEG while copying cache data.
-; A miss fills just the requested sector. Never cache failed transfers.
-read_physical:
-    call decode_request
-    jc .bad
-    cmp byte [cache_valid],0
-    je .new
-    cmp al,[cache_drive]
-    jne .new
-    cmp ch,[cache_track]
-    je .lookup
-.new:
-    mov [cache_drive],al
-    mov [cache_track],ch
-    mov byte [cache_valid],1
-    push ax
-    push cx
-    push di
-    push es
-    push ds
-    pop es
-    xor ax,ax
-    mov di,cache_map
-    mov cx,52
-    rep stosb
-    pop es
-    pop di
-    pop cx
-    pop ax
-.lookup:
-    xor bx,bx
-    mov bl,[request_index]
-    cmp byte [cache_map+bx],0
-    je .miss
-    push ds
-    push es
-    push cs
-    pop es
-    mov ax,CACHE_SEG
-    mov ds,ax
-    mov si,bx
-    mov cl,8
-    shl si,cl
-    mov di,fdc2d_buffer
-    mov cx,128
-    rep movsw
-    pop es
-    pop ds
-    clc
-    ret
-.miss:
-    call fdc2d_read
-    jc .bad
-    call cache_store
-    clc
-    ret
-.bad:
-    mov byte [cache_valid],0
-    stc
-    ret
-
-cache_store:
-    push es
-    mov ax,CACHE_SEG
-    mov es,ax
-    xor bx,bx
-    mov bl,[request_index]
-    mov byte [cache_map+bx],1
-    mov di,bx
-    mov cl,8
-    shl di,cl
-    mov si,fdc2d_buffer
-    mov cx,128
-    rep movsw
-    pop es
+    mov si,[cache_slot]
+    shl si,1
+    mov ax,[cache_segments+si]
     ret
 
 read_record:
-    call read_physical
+    call decode_request
     jc .done
-    mov si,fdc2d_buffer
-    add si,[half_offset]
+    call cache_ensure
+    jc .done
+    call cache_record_address
     mov di,[request_dma]
+    push ds
+    mov ds,ax
+    mov si,bx
     mov cx,64
     rep movsw
+    pop ds
     clc
 .done:
     ret
 
 write_record:
-    call read_physical
+    call decode_request
     jc .done
+    mov al,[es:MBOX_DATA]  ; CP/M WRITE type in mailbox FLAGS/DATA
+    mov [cache_write_type],al
+    ; Directory metadata must never precede pending file data.
+    cmp al,1
+    jne .ensure
+    call cache_flush_all
+    jc .done
+.ensure:
+    call cache_ensure
+    jc .done
+    call cache_record_address
+    mov di,bx
+    mov si,[request_dma]
     push ds
     push es
-    ; Source is CP/M RAM in bank 1; destination is the native bounce buffer.
     push es
-    pop ds
-    push cs
-    pop es
-    mov si,[es:request_dma]
-    mov di,[es:half_offset]
-    add di,fdc2d_buffer
+    pop ds               ; source = CP/M memory
+    mov es,ax            ; destination = selected cache window
     mov cx,64
     rep movsw
     pop es
     pop ds
-    call decode_request
-    jc .done
-    call fdc2d_write
-    jc .failed
-    call cache_store
+    call cache_mark_dirty
+    cmp byte [cache_write_type],1
+    jne .ok
+    call cache_flush_all
+    ret
+.ok:
     clc
 .done:
     ret
-.failed:
-    mov byte [cache_valid],0
-    stc
-    ret
+
+%include "i8086/track_cache.inc"
 
 diagnostic:
     push ax
@@ -410,12 +371,9 @@ boot_drive db 0
 load_position dw 0
 load_head db 0
 request_dma dw 0
-half_offset dw 0
-request_index db 0
-cache_valid db 0
-cache_drive db 0
-cache_track db 0
-cache_map times 52 db 0
+cur_disk db 0
+cur_track dw 0
+cur_sector dw 0
 %include "i8086/floppy.inc"
 %include "i8086/local_console.inc"
 %include "i8086/ansi_console.inc"
