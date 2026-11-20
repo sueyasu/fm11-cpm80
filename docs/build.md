@@ -2,17 +2,14 @@
 
 ## Required tools
 
-- `asm8080` for the CP/M 2.2 CCP/BDOS (same assembler as PC-9801 CP/M-80)
-- `z80asm` for the Z80 BIOS
+- `asm8080` for the CP/M 2.2 CCP/BDOS and CBIOS (same assembler as PC-9801 CP/M-80)
 - `lwasm` from LWTOOLS, used in strict 6809 mode (`--6809`)
 - Python 3
 - GNU Make or a compatible make
 
-On Ubuntu, install the Z80 assembler with:
-
-```sh
-sudo apt install z80asm
-```
+The CBIOS uses only Intel 8080 instructions; the current target remains the
+Z80 card. The build prepends `include/z80/fm11.inc` to the BIOS source in
+`build/z80/bios.asm` before assembly. No z80asm is required.
 
 ## CCP + BDOS
 

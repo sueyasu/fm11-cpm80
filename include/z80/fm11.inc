@@ -1,43 +1,43 @@
-; FM-11 hardware definitions for the Z80 side.
+; FM-11 hardware definitions for the 8080-compatible BIOS (Z80 card).
 ;
 ; The Z80 card sees memory from 0000-FBFF and memory-mapped I/O from
 ; FC00-FFFF. Only I/O explicitly intended for Z80 access should be used.
 
-FM11_CPUCTL:    equ     0FD05h  ; bit 0: 1=Z80 runs, 0=main CPU runs
-FM11_BANK:      equ     0FD2Fh  ; Z80 bank register, x4000-xBFFF window
-FM11_Z80INT:    equ     0FD50h  ; Z80-card interrupt control (TBD)
+FM11_CPUCTL EQU     0FD05H  ; bit 0: 1=Z80 runs, 0=main CPU runs
+FM11_BANK EQU     0FD2FH  ; Z80 bank register, x4000-xBFFF window
+FM11_Z80INT EQU     0FD50H  ; Z80-card interrupt control (TBD)
 
 ; Standard 8251. The BIOS currently assumes firmware/loader has
 ; initialized its mode/baud-clock environment before Z80 hand-off.
-FM11_SER_DATA:  equ     0FD06h
-FM11_SER_STAT:  equ     0FD07h
+FM11_SER_DATA EQU     0FD06H
+FM11_SER_STAT EQU     0FD07H
 
-I8251_TXRDY:    equ     01h
-I8251_RXRDY:    equ     02h
+I8251_TXRDY EQU     01H
+I8251_RXRDY EQU     02H
 
 ; Shared mailbox. Place the ten-byte communication block at the very top
 ; of Z80-visible RAM so lower memory remains available to CP/M.
-BOOTDRV:        equ     0FBF4h ; logical boot drive (0=2D, 4=2HD)
-MBOX_BASE:      equ     0FBF6h
-MBOX_CMD:       equ     MBOX_BASE+0
-MBOX_STATUS:    equ     MBOX_BASE+1
-MBOX_DRIVE:     equ     MBOX_BASE+2
-MBOX_FLAGS:     equ     MBOX_BASE+3
-MBOX_DATA:      equ     MBOX_FLAGS
-MBOX_TRACK_H:   equ     MBOX_BASE+4
-MBOX_TRACK_L:   equ     MBOX_BASE+5
-MBOX_SECTOR_H:  equ     MBOX_BASE+6
-MBOX_SECTOR_L:  equ     MBOX_BASE+7
-MBOX_DMA_H:     equ     MBOX_BASE+8
-MBOX_DMA_L:     equ     MBOX_BASE+9
+BOOTDRV EQU     0FBF4H  ; logical boot drive (0=2D, 4=2HD)
+MBOX_BASE EQU     0FBF6H
+MBOX_CMD EQU     MBOX_BASE+0
+MBOX_STATUS EQU     MBOX_BASE+1
+MBOX_DRIVE EQU     MBOX_BASE+2
+MBOX_FLAGS EQU     MBOX_BASE+3
+MBOX_DATA EQU     MBOX_FLAGS
+MBOX_TRACK_H EQU     MBOX_BASE+4
+MBOX_TRACK_L EQU     MBOX_BASE+5
+MBOX_SECTOR_H EQU     MBOX_BASE+6
+MBOX_SECTOR_L EQU     MBOX_BASE+7
+MBOX_DMA_H EQU     MBOX_BASE+8
+MBOX_DMA_L EQU     MBOX_BASE+9
 
-MBCMD_NONE:     equ     00h
-MBCMD_READ:     equ     01h
-MBCMD_WRITE:    equ     02h
-MBCMD_WBOOT:    equ     03h
-MBCMD_LOCAL_CONST:  equ 10h
-MBCMD_LOCAL_CONIN:  equ 11h
-MBCMD_LOCAL_CONOUT: equ 12h
+MBCMD_NONE EQU     00H
+MBCMD_READ EQU     01H
+MBCMD_WRITE EQU     02H
+MBCMD_WBOOT EQU     03H
+MBCMD_LOCAL_CONST EQU     10H
+MBCMD_LOCAL_CONIN EQU     11H
+MBCMD_LOCAL_CONOUT EQU     12H
 
-MBSTAT_OK:      equ     00h
-MBSTAT_ERROR:   equ     01h
+MBSTAT_OK EQU     00H
+MBSTAT_ERROR EQU     01H

@@ -10,112 +10,106 @@
 ;   boot type             = FBF5h (0=2D, 1=2HD)
 ;   mailbox               = FBF6h-FBFFh
 ;
-; Z80 syntax for z80asm.
+; Intel 8080 syntax for asm8080; runs on the FM-11 Z80 card.
 
-        include "fm11.inc"
-
-CCPBASE:        equ     0DC00h
-BDOSENT:        equ     0E406h
-BIOSBASE:       equ     0F200h
-WBOOTENT:       equ     BIOSBASE+3
-BOOTTYPE:       equ     0FBF5h
-BOOT_2D:        equ     00h
-BOOT_2HD:       equ     01h
+CCPBASE EQU     0DC00H
+BDOSENT EQU     0E406H
+BIOSBASE EQU     0F200H
+WBOOTENT EQU     BIOSBASE+3
+BOOTTYPE EQU     0FBF5H
+BOOT_2D EQU     00H
+BOOT_2HD EQU     01H
 
 ; CP/M mutable disk workspace is packed directly below the shared boot-type
 ; byte and mailbox. All eight ALVs retain the larger 2HD size to keep
 ; the existing workspace layout.
-DIRBUF:         equ     0F970h
-CSV0:           equ     0F9F0h
-CSV1:           equ     CSV0+32
-CSV2:           equ     CSV1+32
-CSV3:           equ     CSV2+32
-CSV4:           equ     CSV3+32
-CSV5:           equ     CSV4+32
-CSV6:           equ     CSV5+32
-CSV7:           equ     CSV6+32
-ALV0:           equ     0FAF0h
-ALV1:           equ     ALV0+31
-ALV2:           equ     ALV1+31
-ALV3:           equ     ALV2+31
-ALV4:           equ     ALV3+31
-ALV5:           equ     ALV4+31
-ALV6:           equ     ALV5+31
-ALV7:           equ     ALV6+31
+DIRBUF EQU     0F970H
+CSV0 EQU     0F9F0H
+CSV1 EQU     CSV0+32
+CSV2 EQU     CSV1+32
+CSV3 EQU     CSV2+32
+CSV4 EQU     CSV3+32
+CSV5 EQU     CSV4+32
+CSV6 EQU     CSV5+32
+CSV7 EQU     CSV6+32
+ALV0 EQU     0FAF0H
+ALV1 EQU     ALV0+31
+ALV2 EQU     ALV1+31
+ALV3 EQU     ALV2+31
+ALV4 EQU     ALV3+31
+ALV5 EQU     ALV4+31
+ALV6 EQU     ALV5+31
+ALV7 EQU     ALV6+31
 
-        org     BIOSBASE
+        ORG     BIOSBASE
 
-        jp      boot
-        jp      wboot
-        jp      const
-        jp      conin
-        jp      conout
-        jp      list
-        jp      punch
-        jp      reader
-        jp      home
-        jp      seldsk
-        jp      settrk
-        jp      setsec
-        jp      setdma
-        jp      read
-        jp      write
-        jp      listst
-        jp      sectran
+        JMP     BOOT
+        JMP     WBOOT
+        JMP     CONST
+        JMP     CONIN
+        JMP     CONOUT
+        JMP     LIST
+        JMP     PUNCH
+        JMP     READER
+        JMP     HOME
+        JMP     SELDSK
+        JMP     SETTRK
+        JMP     SETSEC
+        JMP     SETDMA
+        JMP     READ
+        JMP     WRITE
+        JMP     LISTST
+        JMP     SECTRAN
 
 ; ----------------------------------------------------------------------
 ; BOOT / WBOOT
 ; ----------------------------------------------------------------------
 
-boot:
+BOOT EQU     $
         ; Z80 reset leaves SP undefined (zero in the emulator).  The
         ; first CALL must not push its return address into FC00h-FFFFh,
         ; which is the I/O aperture, not RAM.  Use the same reserved
         ; boot stack as WBOOT, immediately below the disk workspace.
-        ld      sp,0F960h
-        xor     a
-        ld      (FM11_BANK),a   ; CP/M 2.2 always runs with Z80 bank 0
-        inc     a
-        ld      (0003h),a       ; IOBYTE: CON:=CRT selects FM-11 local console
-        xor     a
-        ld      (uc1_next),a
-        ld      a,(BOOTDRV)
-        ld      (0004h),a       ; user 0, actual boot drive
-        ld      (curdrv),a
-        ld      hl,0080h
-        ld      (curdma),hl
-        call    serial_init     ; keep TTY ready for STAT CON:=TTY:
-        call    setvec
-        call    cold_banner
-        ld      a,(BOOTDRV)
-        ld      c,a             ; CCP entry C = uuuudddd
-        jp      CCPBASE
+        LXI     SP,0F960H
+        XRA     A
+        STA     FM11_BANK  ; CP/M 2.2 always runs with Z80 bank 0
+        INR     A
+        STA     0003H  ; IOBYTE: CON:=CRT selects FM-11 local console
+        XRA     A
+        STA     UC1_NEXT
+        LDA     BOOTDRV
+        STA     0004H  ; user 0, actual boot drive
+        STA     CURDRV
+        LXI     H,0080H
+        SHLD    CURDMA
+        CALL    SERIAL_INIT  ; keep TTY ready for STAT CON:=TTY:
+        CALL    SETVEC
+        CALL    COLD_BANNER
+        LDA     BOOTDRV
+        MOV     C,A  ; CCP entry C = uuuudddd
+        JMP     CCPBASE
 
 ; Cold-boot presentation is local-console only.  FM-11 native control $16
 ; clears both graphic and character screens.  Do not repeat this on WBOOT.
-cold_banner:
-        ld      c,016h
-        call    local_conout
-        ld      hl,bootmsg
-.cold_banner_loop:
-        ld      a,(hl)
-        or      a
-        jr      z,.cold_banner_done
-        ld      c,a
-        push    hl
-        call    local_conout
-        pop     hl
-        inc     hl
-        jr      .cold_banner_loop
-.cold_banner_done:
-        ld      c,00Dh
-        call    local_conout
-        ld      c,00Ah
-        call    local_conout
-        ret
+COLD_BANNER  MVI     C,016H
+        CALL    LOCAL_CONOUT
+        LXI     H,BOOTMSG
+COLD_BANNER_COLD_BANNER_LOOP  MOV     A,M
+        ORA     A
+        JZ      COLD_BANNER_COLD_BANNER_DONE
+        MOV     C,A
+        PUSH    H
+        CALL    LOCAL_CONOUT
+        POP     H
+        INX     H
+        JMP     COLD_BANNER_COLD_BANNER_LOOP
+COLD_BANNER_COLD_BANNER_DONE  MVI     C,00DH
+        CALL    LOCAL_CONOUT
+        MVI     C,00AH
+        CALL    LOCAL_CONOUT
+        RET
 
-bootmsg:
-        db      "CP/M-80 v2.2 for FM-11 series.",0
+BOOTMSG  DB      'CP/M-80 v2.2 for FM-11 series.',0
 
 ; Reload CCP+BDOS from the reserved system tracks on the boot disk.
 ; CP/M page zero byte 0004h is uuuudddd: high nibble = user number,
@@ -131,55 +125,59 @@ bootmsg:
 ; restoring a non-boot drive after WBOOT, probe its first data track. If the
 ; drive/media is unavailable, fall back to the boot drive, whose availability has already
 ; been proven by the successful system reload above.
-wboot:
-        ld      sp,0F960h
-        ld      a,(0004h)
-        ld      (wbootinfo),a
-.wboot_retry:
-        ld      a,MBCMD_WBOOT
-        call    mbox_simple
-        or      a
-        jr      nz,.wboot_retry ; retry on boot-media/FDC error
+WBOOT   LXI     SP,0F960H
+        LDA     0004H
+        STA     WBOOTINFO
+WBOOT_WBOOT_RETRY  MVI     A,MBCMD_WBOOT
+        CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     WBOOT_WBOOT_RETRY  ; retry on boot-media/FDC error
 
-        ld      a,(wbootinfo)
-        and     00Fh
-        cp      8
-        jr      nc,.wboot_fallback
-        ld      b,a
-        ld      a,(BOOTDRV)
-        cp      b
-        jr      z,.wboot_drive_ok
-        ld      a,b
-        ld      (curdrv),a
-        ld      bc,2            ; OFF=2 for both supported floppy formats
-        ld      (curtrk),bc
-        ld      bc,0
-        ld      (cursec),bc
-        ld      hl,DIRBUF
-        ld      (curdma),hl
-        ld      a,MBCMD_READ
-        call    disk_call
-        or      a
-        jr      z,.wboot_drive_ok
+        LDA     WBOOTINFO
+        ANI     00FH
+        CPI     8
+        JNC     WBOOT_WBOOT_FALLBACK
+        MOV     B,A
+        LDA     BOOTDRV
+        CMP     B
+        JZ      WBOOT_WBOOT_DRIVE_OK
+        MOV     A,B
+        STA     CURDRV
+        LXI     B,2  ; OFF=2 for both supported floppy formats
+        PUSH    H
+        MOV     H,B
+        MOV     L,C
+        SHLD    CURTRK
+        POP     H
+        LXI     B,0
+        PUSH    H
+        MOV     H,B
+        MOV     L,C
+        SHLD    CURSEC
+        POP     H
+        LXI     H,DIRBUF
+        SHLD    CURDMA
+        MVI     A,MBCMD_READ
+        CALL    DISK_CALL
+        ORA     A
+        JZ      WBOOT_WBOOT_DRIVE_OK
 
-.wboot_fallback:
-        ld      a,(wbootinfo)
-        and     0F0h            ; preserve user, select actual boot drive
-        ld      b,a
-        ld      a,(BOOTDRV)
-        or      b
-        ld      (wbootinfo),a
+WBOOT_WBOOT_FALLBACK  LDA     WBOOTINFO
+        ANI     0F0H  ; preserve user, select actual boot drive
+        MOV     B,A
+        LDA     BOOTDRV
+        ORA     B
+        STA     WBOOTINFO
 
-.wboot_drive_ok:
-        ld      a,(wbootinfo)
-        ld      (0004h),a
-        ld      c,a
-        and     00Fh
-        ld      (curdrv),a
-        ld      hl,0080h
-        ld      (curdma),hl
-        call    setvec
-        jp      CCPBASE
+WBOOT_WBOOT_DRIVE_OK  LDA     WBOOTINFO
+        STA     0004H
+        MOV     C,A
+        ANI     00FH
+        STA     CURDRV
+        LXI     H,0080H
+        SHLD    CURDMA
+        CALL    SETVEC
+        JMP     CCPBASE
 
 ; CP/M page-zero ABI:
 ;   0000h-0002h = JP to the BIOS WBOOT jump-table entry
@@ -189,15 +187,14 @@ wboot:
 ; Keep 0001h pointing at the WBOOT entry in the BIOS jump table, not at the
 ; wboot implementation routine.  CP/M software may derive the other BIOS
 ; entry points from this standard vector.
-setvec:
-        ld      a,0C3h          ; JP opcode
-        ld      (0000h),a
-        ld      hl,WBOOTENT
-        ld      (0001h),hl
-        ld      (0005h),a
-        ld      hl,BDOSENT
-        ld      (0006h),hl
-        ret
+SETVEC  MVI     A,0C3H  ; JP opcode
+        STA     0000H
+        LXI     H,WBOOTENT
+        SHLD    0001H
+        STA     0005H
+        LXI     H,BDOSENT
+        SHLD    0006H
+        RET
 
 ; ----------------------------------------------------------------------
 ; Console.
@@ -208,277 +205,254 @@ setvec:
 ; LIST/PUNCH/READER stay on the serial device and do not follow CON:.
 ; ----------------------------------------------------------------------
 
-serial_init:
-        xor     a
-        ld      (FM11_SER_STAT),a
-        ld      (FM11_SER_STAT),a
-        ld      (FM11_SER_STAT),a
-        ld      a,040h
-        ld      (FM11_SER_STAT),a
-        ld      a,04Eh
-        ld      (FM11_SER_STAT),a
-        ld      a,027h
-        ld      (FM11_SER_STAT),a
-        ret
+SERIAL_INIT  XRA     A
+        STA     FM11_SER_STAT
+        STA     FM11_SER_STAT
+        STA     FM11_SER_STAT
+        MVI     A,040H
+        STA     FM11_SER_STAT
+        MVI     A,04EH
+        STA     FM11_SER_STAT
+        MVI     A,027H
+        STA     FM11_SER_STAT
+        RET
 
-const:
-        ld      a,(0003h)
-        and     03h
-        cp      01h
-        jp      z,local_const
-        cp      03h
-        jr      nz,serial_const
-        call    local_const
-        or      a
-        ret     nz
+CONST   LDA     0003H
+        ANI     03H
+        CPI     01H
+        JZ      LOCAL_CONST
+        CPI     03H
+        JNZ     SERIAL_CONST
+        CALL    LOCAL_CONST
+        ORA     A
+        RNZ
 
-serial_const:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_RXRDY
-        ret     z
-        ld      a,0FFh
-        ret
+SERIAL_CONST  LDA     FM11_SER_STAT
+        ANI     I8251_RXRDY
+        RZ
+        MVI     A,0FFH
+        RET
 
-local_const:
-        ld      a,MBCMD_LOCAL_CONST
-        call    mbox_simple
-        or      a
-        jr      nz,.not_ready
-        ld      a,(MBOX_DATA)
-        ret
-.not_ready:
-        xor     a
-        ret
+LOCAL_CONST  MVI     A,MBCMD_LOCAL_CONST
+        CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     LOCAL_CONST_NOT_READY
+        LDA     MBOX_DATA
+        RET
+LOCAL_CONST_NOT_READY  XRA     A
+        RET
 
-conin:
-        ld      a,(0003h)
-        and     03h
-        cp      01h
-        jp      z,local_conin
-        cp      03h
-        jp      z,shared_conin
+CONIN   LDA     0003H
+        ANI     03H
+        CPI     01H
+        JZ      LOCAL_CONIN
+        CPI     03H
+        JZ      SHARED_CONIN
 
-serial_conin:
-.conin_wait:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_RXRDY
-        jr      z,.conin_wait
-        ld      a,(FM11_SER_DATA)
-        and     07Fh
-        ret
+SERIAL_CONIN EQU     $
+SERIAL_CONIN_CONIN_WAIT  LDA     FM11_SER_STAT
+        ANI     I8251_RXRDY
+        JZ      SERIAL_CONIN_CONIN_WAIT
+        LDA     FM11_SER_DATA
+        ANI     07FH
+        RET
 
-local_conin:
-.local_conin_retry:
-        ld      a,MBCMD_LOCAL_CONIN
-        call    mbox_simple
-        or      a
-        jr      nz,.local_conin_retry
-        ld      a,(MBOX_DATA)
-        and     07Fh
-        ret
+LOCAL_CONIN EQU     $
+LOCAL_CONIN_LOCAL_CONIN_RETRY  MVI     A,MBCMD_LOCAL_CONIN
+        CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     LOCAL_CONIN_LOCAL_CONIN_RETRY
+        LDA     MBOX_DATA
+        ANI     07FH
+        RET
 
-shared_conin:
-        push    bc
-.shared_wait:
-        call    local_const
-        ld      b,a
-        call    serial_const
-        or      a
-        jr      z,.no_serial
-        ld      a,b
-        or      a
-        jr      z,.serial
-        ld      a,(uc1_next)
-        or      a
-        jr      nz,.serial
-.local:
-        ld      a,1
-        ld      (uc1_next),a
-        pop     bc
-        jp      local_conin
-.no_serial:
-        ld      a,b
-        or      a
-        jr      z,.shared_wait
-        jr      .local
-.serial:
-        xor     a
-        ld      (uc1_next),a
-        pop     bc
-        jp      serial_conin
+SHARED_CONIN  PUSH    B
+SHARED_CONIN_SHARED_WAIT  CALL    LOCAL_CONST
+        MOV     B,A
+        CALL    SERIAL_CONST
+        ORA     A
+        JZ      SHARED_CONIN_NO_SERIAL
+        MOV     A,B
+        ORA     A
+        JZ      SHARED_CONIN_SERIAL
+        LDA     UC1_NEXT
+        ORA     A
+        JNZ     SHARED_CONIN_SERIAL
+SHARED_CONIN_LOCAL  MVI     A,1
+        STA     UC1_NEXT
+        POP     B
+        JMP     LOCAL_CONIN
+SHARED_CONIN_NO_SERIAL  MOV     A,B
+        ORA     A
+        JZ      SHARED_CONIN_SHARED_WAIT
+        JMP     SHARED_CONIN_LOCAL
+SHARED_CONIN_SERIAL  XRA     A
+        STA     UC1_NEXT
+        POP     B
+        JMP     SERIAL_CONIN
 
-conout:
-        ld      a,(0003h)
-        and     03h
-        cp      01h
-        jp      z,local_conout
-        cp      03h
-        jr      z,shared_conout
+CONOUT  LDA     0003H
+        ANI     03H
+        CPI     01H
+        JZ      LOCAL_CONOUT
+        CPI     03H
+        JZ      SHARED_CONOUT
 
-serial_conout:
-        push    af
-.conout_wait:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_TXRDY
-        jr      z,.conout_wait
-        pop     af
-        ld      a,c
-        ld      (FM11_SER_DATA),a
-        ret
+SERIAL_CONOUT  PUSH    PSW
+SERIAL_CONOUT_CONOUT_WAIT  LDA     FM11_SER_STAT
+        ANI     I8251_TXRDY
+        JZ      SERIAL_CONOUT_CONOUT_WAIT
+        POP     PSW
+        MOV     A,C
+        STA     FM11_SER_DATA
+        RET
 
-shared_conout:
-        call    local_conout
-        push    hl
-        ld      hl,0FFFFh
-.mirror_wait:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_TXRDY
-        jr      nz,.mirror_ready
-        dec     hl
-        ld      a,h
-        or      l
-        jr      nz,.mirror_wait
-        pop     hl
-        ret
-.mirror_ready:
-        ld      a,c
-        ld      (FM11_SER_DATA),a
-        pop     hl
-        ret
+SHARED_CONOUT  CALL    LOCAL_CONOUT
+        PUSH    H
+        LXI     H,0FFFFH
+SHARED_CONOUT_MIRROR_WAIT  LDA     FM11_SER_STAT
+        ANI     I8251_TXRDY
+        JNZ     SHARED_CONOUT_MIRROR_READY
+        DCX     H
+        MOV     A,H
+        ORA     L
+        JNZ     SHARED_CONOUT_MIRROR_WAIT
+        POP     H
+        RET
+SHARED_CONOUT_MIRROR_READY  MOV     A,C
+        STA     FM11_SER_DATA
+        POP     H
+        RET
 
-local_conout:
-.local_conout_retry:
-        ld      a,c
-        ld      (MBOX_DATA),a
-        ld      a,MBCMD_LOCAL_CONOUT
-        call    mbox_simple
-        or      a
+LOCAL_CONOUT EQU     $
+LOCAL_CONOUT_LOCAL_CONOUT_RETRY  MOV     A,C
+        STA     MBOX_DATA
+        MVI     A,MBCMD_LOCAL_CONOUT
+        CALL    MBOX_SIMPLE
+        ORA     A
         ; Do not replay a partially transmitted native escape.
-        ret
+        RET
 
-list:
-        jp      serial_conout
+LIST    JMP     SERIAL_CONOUT
 
-punch:
-        jp      serial_conout
+PUNCH   JMP     SERIAL_CONOUT
 
-reader:
-        jp      serial_conin
+READER  JMP     SERIAL_CONIN
 
-listst:
-        ld      a,(FM11_SER_STAT)
-        and     I8251_TXRDY
-        ret     z
-        ld      a,0FFh
-        ret
+LISTST  LDA     FM11_SER_STAT
+        ANI     I8251_TXRDY
+        RZ
+        MVI     A,0FFH
+        RET
 
 ; ----------------------------------------------------------------------
 ; Disk parameter state
 ; ----------------------------------------------------------------------
 
-home:
-        ld      bc,0
-        jp      settrk
+HOME    LXI     B,0
+        JMP     SETTRK
 
 ; C = CP/M drive number 0..7. A:-D: always 2D, E:-H: always 2HD.
 ; Returns HL=DPH or HL=0 if unsupported. Each DPH has a fixed DPB.
-seldsk:
-        ld      a,c
-        cp      8
-        jr      nc,.bad_drive
-        ld      (curdrv),a
-        ld      l,a
-        ld      h,0
-        add     hl,hl           ; word table
-        ld      de,dphtab
-        add     hl,de
-        ld      e,(hl)
-        inc     hl
-        ld      d,(hl)
-        ex      de,hl           ; HL = selected DPH
-        ret
-.bad_drive:
-        ld      hl,0
-        ret
+SELDSK  MOV     A,C
+        CPI     8
+        JNC     SELDSK_BAD_DRIVE
+        STA     CURDRV
+        MOV     L,A
+        MVI     H,0
+        DAD     H  ; word table
+        LXI     D,DPHTAB
+        DAD     D
+        MOV     E,M
+        INX     H
+        MOV     D,M
+        XCHG      ; HL = selected DPH
+        RET
+SELDSK_BAD_DRIVE  LXI     H,0
+        RET
 
-settrk:
-        ld      (curtrk),bc
-        ret
+SETTRK  PUSH    H
+        MOV     H,B
+        MOV     L,C
+        SHLD    CURTRK
+        POP     H
+        RET
 
-setsec:
-        ld      (cursec),bc
-        ret
+SETSEC  PUSH    H
+        MOV     H,B
+        MOV     L,C
+        SHLD    CURSEC
+        POP     H
+        RET
 
-setdma:
-        ld      (curdma),bc
-        ret
+SETDMA  PUSH    H
+        MOV     H,B
+        MOV     L,C
+        SHLD    CURDMA
+        POP     H
+        RET
 
-read:
-        ld      a,MBCMD_READ
-        jp      disk_call
+READ    MVI     A,MBCMD_READ
+        JMP     DISK_CALL
 
-write:
-        ld      a,c
-        ld      (MBOX_FLAGS),a  ; CP/M write type for future optimisation
-        ld      a,MBCMD_WRITE
-        jp      disk_call
+WRITE   MOV     A,C
+        STA     MBOX_FLAGS  ; CP/M write type for future optimisation
+        MVI     A,MBCMD_WRITE
+        JMP     DISK_CALL
 
 ; BC = logical sector, DE = translation table. No skew table initially.
-sectran:
-        ld      h,b
-        ld      l,c
-        ret
+SECTRAN  MOV     H,B
+        MOV     L,C
+        RET
 
 ; ----------------------------------------------------------------------
 ; Z80 -> 6809 synchronous service call
 ; ----------------------------------------------------------------------
 
-disk_call:
-        ld      (MBOX_CMD),a
-        xor     a
-        ld      (MBOX_STATUS),a
+DISK_CALL  STA     MBOX_CMD
+        XRA     A
+        STA     MBOX_STATUS
 
-        ld      a,(curdrv)
-        ld      (MBOX_DRIVE),a
+        LDA     CURDRV
+        STA     MBOX_DRIVE
 
-        ld      hl,(curtrk)
-        ld      a,h
-        ld      (MBOX_TRACK_H),a
-        ld      a,l
-        ld      (MBOX_TRACK_L),a
+        LHLD    CURTRK
+        MOV     A,H
+        STA     MBOX_TRACK_H
+        MOV     A,L
+        STA     MBOX_TRACK_L
 
-        ld      hl,(cursec)
-        ld      a,h
-        ld      (MBOX_SECTOR_H),a
-        ld      a,l
-        ld      (MBOX_SECTOR_L),a
+        LHLD    CURSEC
+        MOV     A,H
+        STA     MBOX_SECTOR_H
+        MOV     A,L
+        STA     MBOX_SECTOR_L
 
-        ld      hl,(curdma)
-        ld      a,h
-        ld      (MBOX_DMA_H),a
-        ld      a,l
-        ld      (MBOX_DMA_L),a
+        LHLD    CURDMA
+        MOV     A,H
+        STA     MBOX_DMA_H
+        MOV     A,L
+        STA     MBOX_DMA_L
 
-        di
-        xor     a
-        ld      (FM11_CPUCTL),a ; stop Z80, resume 6809
-        nop                     ; Z80 resumes here
-        ei
-        ld      a,(MBOX_STATUS)
-        or      a
-        ret
+        DI
+        XRA     A
+        STA     FM11_CPUCTL  ; stop Z80, resume 6809
+        NOP       ; Z80 resumes here
+        EI
+        LDA     MBOX_STATUS
+        ORA     A
+        RET
 
-mbox_simple:
-        ld      (MBOX_CMD),a
-        xor     a
-        ld      (MBOX_STATUS),a
-        di
-        ld      (FM11_CPUCTL),a
-        nop
-        ei
-        ld      a,(MBOX_STATUS)
-        or      a
-        ret
+MBOX_SIMPLE  STA     MBOX_CMD
+        XRA     A
+        STA     MBOX_STATUS
+        DI
+        STA     FM11_CPUCTL
+        NOP
+        EI
+        LDA     MBOX_STATUS
+        ORA     A
+        RET
 
 ; ----------------------------------------------------------------------
 ; DPH / DPB
@@ -487,64 +461,46 @@ mbox_simple:
 ; DPH: XLT, 3 scratch words, DIRBUF, DPB, CSV, ALV.
 ; The DPB field is fixed for each logical drive.
 
-dph0:
-        dw      0,0,0,0,DIRBUF,dpb2d,CSV0,ALV0
-dph1:
-        dw      0,0,0,0,DIRBUF,dpb2d,CSV1,ALV1
-dph2:
-        dw      0,0,0,0,DIRBUF,dpb2d,CSV2,ALV2
-dph3:
-        dw      0,0,0,0,DIRBUF,dpb2d,CSV3,ALV3
-dph4:
-        dw      0,0,0,0,DIRBUF,dpb2hd,CSV4,ALV4
-dph5:
-        dw      0,0,0,0,DIRBUF,dpb2hd,CSV5,ALV5
-dph6:
-        dw      0,0,0,0,DIRBUF,dpb2hd,CSV6,ALV6
-dph7:
-        dw      0,0,0,0,DIRBUF,dpb2hd,CSV7,ALV7
+DPH0    DW      0,0,0,0,DIRBUF,DPB2D,CSV0,ALV0
+DPH1    DW      0,0,0,0,DIRBUF,DPB2D,CSV1,ALV1
+DPH2    DW      0,0,0,0,DIRBUF,DPB2D,CSV2,ALV2
+DPH3    DW      0,0,0,0,DIRBUF,DPB2D,CSV3,ALV3
+DPH4    DW      0,0,0,0,DIRBUF,DPB2HD,CSV4,ALV4
+DPH5    DW      0,0,0,0,DIRBUF,DPB2HD,CSV5,ALV5
+DPH6    DW      0,0,0,0,DIRBUF,DPB2HD,CSV6,ALV6
+DPH7    DW      0,0,0,0,DIRBUF,DPB2HD,CSV7,ALV7
 
-dphtab:
-        dw      dph0,dph1,dph2,dph3
-        dw      dph4,dph5,dph6,dph7
+DPHTAB  DW      DPH0,DPH1,DPH2,DPH3
+        DW      DPH4,DPH5,DPH6,DPH7
 
 ; Fujitsu-compatible 2D DPB: 40 cyl, 2 sides, 16 x 256 B/side.
-dpb2d:
-        dw      64              ; SPT
-        db      4               ; BSH, 2 KiB blocks
-        db      15              ; BLM
-        db      1               ; EXM
-        dw      151             ; DSM
-        dw      127             ; DRM
-        db      0C0h            ; AL0
-        db      00h             ; AL1
-        dw      32              ; CKS
-        dw      2               ; OFF
+DPB2D   DW      64  ; SPT
+        DB      4  ; BSH, 2 KiB blocks
+        DB      15  ; BLM
+        DB      1  ; EXM
+        DW      151  ; DSM
+        DW      127  ; DRM
+        DB      0C0H  ; AL0
+        DB      00H  ; AL1
+        DW      32  ; CKS
+        DW      2  ; OFF
 
 ; Fujitsu-compatible 2HD DPB: 77 cyl, 2 sides, 26 x 256 B/side.
-dpb2hd:
-        dw      104             ; SPT
-        db      5               ; BSH, 4 KiB blocks
-        db      31              ; BLM
-        db      3               ; EXM
-        dw      242             ; DSM
-        dw      127             ; DRM
-        db      080h            ; AL0
-        db      00h             ; AL1
-        dw      32              ; CKS
-        dw      2               ; OFF
+DPB2HD  DW      104  ; SPT
+        DB      5  ; BSH, 4 KiB blocks
+        DB      31  ; BLM
+        DB      3  ; EXM
+        DW      242  ; DSM
+        DW      127  ; DRM
+        DB      080H  ; AL0
+        DB      00H  ; AL1
+        DW      32  ; CKS
+        DW      2  ; OFF
 
-curdrv:
-        db      0
-curtrk:
-        dw      0
-cursec:
-        dw      0
-curdma:
-        dw      0080h
-wbootinfo:
-        db      0
-uc1_next:
-        db      0
+CURDRV  DB      0
+CURTRK  DW      0
+CURSEC  DW      0
+CURDMA  DW      0080H
+WBOOTINFO  DB      0
+UC1_NEXT  DB      0
 
-        end

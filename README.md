@@ -10,7 +10,7 @@ CP/M 2.2 for the Fujitsu FM-11 with the Z80 card.
 
 ## Build
 
-Requires asm8080 (CCP/BDOS), z80asm (BIOS), lwasm (6809), Python 3 and make.
+Requires asm8080 (CCP/BDOS and CBIOS), lwasm (6809), Python 3 and make.
 Run `make`. The CCP/BDOS source is adapted from PC-9801 CP/M-80 v1.1;
 no external core binary is required. See [docs/build.md](docs/build.md).
 Optional COM files in external/commands/ are included in both images.
@@ -24,7 +24,7 @@ input file's drive if necessary (e.g. `E>SUBMIT A:TEST`).
 
 ## Source and license
 
-- cpm22/: CCP/BDOS and Z80 BIOS
+- cpm22/: CCP/BDOS and 8080-compatible CBIOS (currently for the Z80 card)
 - m6809/: disk IPLs and resident I/O service
 - include/: hardware definitions
 - tools/: image builders and checks
