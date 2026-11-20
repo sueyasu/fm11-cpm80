@@ -21,10 +21,9 @@ leave the physical display state uncertain.
 
 The 6809 resident stack starts at logical F000 (grows into E800-EFFF,
 private physical 11800-11FFF). The default build assembles the resident
-source directly, with the write-through floppy cache enabled by default.
+source directly, with the write-through floppy cache always enabled.
 The cache uses physical 12000-15FFF (within the minimum 128 KiB RAM
-configuration). Use make clean followed by make FLOPPY_CACHE_FLAGS=
-to build without the cache for diagnostics. Both builds retain the private
-resident stack and the 6 KiB I/O-server disk-slot size check (D000-E7FF, physical 10000-117FF).
+configuration). The private resident stack and the 6 KiB I/O-server
+disk-slot size check (D000-E7FF, physical 10000-117FF) are unchanged.
 
 2D and 2HD boot images are built by make image2d and make image2hd.

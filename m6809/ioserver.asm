@@ -165,9 +165,7 @@ ServiceWrite2HD
         lbsr    StdFdcWriteSector
 ServiceWriteCommit
         lbcs     ServiceWriteFail
-        ifdef   FLOPPY_CACHE
         lbsr    CacheStoreSector
-        endc
         lda     #MBSTAT_OK
         sta     MBOX_STATUS
         lbra     ServiceDone
@@ -474,7 +472,6 @@ LkfFail
 ********************************************************************
 * One-track physical-sector cache
 ********************************************************************
-        ifdef   FLOPPY_CACHE
 CacheInvalidate
         clr     CacheTagValid
         ldx     #CacheValidMap
@@ -608,21 +605,9 @@ RpcFail
         orcc    #$01
         rts
 
-        else
-CacheInvalidate
-        rts
-        endc
 
 ReadPhysical
-        ifdef   FLOPPY_CACHE
         lbra    ReadPhysicalCached
-        else
-        lda     PhysIs2HD
-        bne     ReadPhysical2HD
-        lbra    MiniFdcReadSector
-ReadPhysical2HD
-        lbra    StdFdcReadSector
-        endc
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -1303,14 +1288,12 @@ WorkCol         rmb     1
 LineRow         rmb     1
 LineCol         rmb     1
 NativeAttr      rmb     1
-        ifdef   FLOPPY_CACHE
 CacheTagValid   rmb     1
 CacheDrive      rmb     1
 CacheTrack      rmb     1
 CacheIs2HD      rmb     1
 CacheIndex      rmb     1
 CacheValidMap   rmb     CACHE_MAX_SECTORS
-        endc
 PhysBuf         rmb     256
 * Emit a final byte so the binary-size check includes trailing workspace.
 IoServerEndMarker fcb   0

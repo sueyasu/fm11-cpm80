@@ -71,7 +71,7 @@ combined system payload is exactly `$1A00` bytes.
 The I/O server is linked at logical D000. The IPL maps MMR13=10h and
 MMR14=11h. D000-E7FF is the resident image and workspace; E800-EFFF
 (physical 11800-11FFF) is the dedicated stack, starting at F000.
-The optional write-through cache occupies physical 12000-15FFF.
+The always-enabled write-through cache occupies physical 12000-15FFF.
 
 Logical page C (C000-CFFF) is the temporary access window onto Z80 RAM
 or cache RAM. MMR12 is saved and restored around copies; 128-byte records
