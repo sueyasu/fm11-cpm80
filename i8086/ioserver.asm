@@ -73,18 +73,20 @@ handoff:
     cmp al,0x10
     jne .not_lconst
     call local_const
+    jc failure
     jmp store_data
 .not_lconst:
     cmp al,0x11
     jne .not_lin
     call local_conin
+    jc failure
     jmp store_data
 .not_lin:
     cmp al,0x12
     jne .not_lout
     mov al,[es:MBOX_DATA]
     call local_putc
-    jmp success
+    jmp finish
 .not_lout:
     cmp al,0x13
     jne .not_sconst

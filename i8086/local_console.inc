@@ -82,7 +82,7 @@ local_subcall:
     ret
 
 ; Byte to native FM-11 CHARACTER OUT, not ANSI/VT100 passthrough.
-; Input AL=byte; preserves AX and all other caller registers.
+; Input AL=byte; preserves all general registers; CF reports transport failure.
 local_putc:
     jmp ansi_putc
 
@@ -120,12 +120,13 @@ local_poll:
     mov byte [local_seq_second],0
     dec byte [local_seq_count]
     mov byte [local_key_valid],1
+    clc
     ret
 .fetch:
     xor ah,ah
     mov al,SUB_INKEY2
     call local_subcall
-    jc .done
+    jc .error
     cmp ah,0
     jne .extended
     or al,al               ; 0 means no key from INKEY2
@@ -144,7 +145,7 @@ local_poll:
     je .left
     cmp al,0x19
     je .right
-    ret
+    jmp .done
 .delete:
     mov al,0x7f
     jmp short .store
@@ -168,24 +169,38 @@ local_poll:
     mov [local_key_byte],al
     mov byte [local_key_valid],1
 .done:
+    clc
+    ret
+.error:
+    stc
     ret
 
 local_const:
     call local_poll
+    jc .error
     xor al,al
     cmp byte [local_key_valid],0
     je .done
-    dec al                 ; CP/M-86 CONST expects 0xFF for ready
+    dec al                 ; CP/M CONST expects 0xFF for ready
 .done:
+    clc
+    ret
+.error:
+    mov al,0               ; no key, preserve transport CF
     ret
 
 local_conin:
 .wait:
     call local_poll
+    jc .error
     cmp byte [local_key_valid],0
     je .wait
     mov al,[local_key_byte]
     mov byte [local_key_valid],0
+    clc
+    ret
+.error:
+    stc
     ret
 
 local_key_valid   db 0

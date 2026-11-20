@@ -1,11 +1,15 @@
-; Adapted from fm11-cpm86 8f094f9 (MIT).
-; CP/M-86 ANSI/VT100 to FM-11 CHARACTER OUT translator.
-; Mirrors the Level-1 NitrOS-9 fm11console supported sequences.
-; All parser state belongs to the resident CBIOS, not to the serial side.
-; Entry AL=character. Preserves all general registers and FLAGS.
+; Shared FM-11 ANSI/VT100 to CHARACTER OUT translator (8086).
+; Behavioral reference: fm11-cpm80 m6809/ansi_console.inc at 93bfb04.
+; Keep this file byte-identical in CP/M-80 and CP/M-86.
+; Public entry ansi_putc: AL=character, DS=resident data.
+; Preserves all general/segment registers and flags except CF.
+; CF=1 on native output failure, CF=0 otherwise.
+; local_native_putc must preserve registers and return CF for transport.
+; All other ansi_* routines are private to ansi_putc.
 ANSI_ESC equ 27
 ANSI_COLS equ 80
 ANSI_ROWS equ 25
+ANSI_MAX_PARAMS equ 8
 
 ansi_putc:
     pushf
@@ -15,6 +19,8 @@ ansi_putc:
     push dx
     push si
     push di
+    push bp
+    mov bp,sp             ; private frame for aborting a failed output
     cmp byte [ansi_state],0
     je .normal
     cmp byte [ansi_state],1
@@ -60,9 +66,12 @@ ansi_putc:
     jmp .done
 .start_csi:
     mov byte [ansi_state],2
-    mov byte [ansi_p1],0
-    mov byte [ansi_p2],0
-    mov byte [ansi_second],0
+    xor ax,ax
+    mov [ansi_p1],ax
+    mov [ansi_p1+2],ax
+    mov [ansi_p1+4],ax
+    mov [ansi_p1+6],ax
+    mov [ansi_param],al
     mov byte [ansi_private],0
     jmp .done
 .save:
@@ -77,9 +86,10 @@ ansi_putc:
     call ansi_goto
     jmp .done
 .reset:
-    call ansi_clear_home
     mov byte [ansi_attr],7
     call ansi_apply_attr
+    call ansi_clear_home
+    mov word [ansi_save_row],0x0101
     jmp .done
 .index:
     mov al,0x1f
@@ -101,26 +111,28 @@ ansi_putc:
     cmp al,'9'
     ja .not_digit
     sub al,'0'
-    mov bl,al
-    cmp byte [ansi_second],0
-    jne .digit2
-    mov al,[ansi_p1]
+    xor bh,bh
+    mov bl,[ansi_param]
+    cmp bl,ANSI_MAX_PARAMS
+    jae .done
+    mov dl,al
+    xor dh,dh
+    mov al,[ansi_p1+bx]
     mov cl,10
     mul cl
-    add al,bl
-    mov [ansi_p1],al
-    jmp .done
-.digit2:
-    mov al,[ansi_p2]
-    mov cl,10
-    mul cl
-    add al,bl
-    mov [ansi_p2],al
+    add ax,dx
+    or ah,ah
+    jz .store_digit
+    mov al,255
+.store_digit:
+    mov [ansi_p1+bx],al
     jmp .done
 .not_digit:
     cmp al,';'
     jne .not_sep
-    mov byte [ansi_second],1
+    cmp byte [ansi_param],ANSI_MAX_PARAMS
+    jae .done
+    inc byte [ansi_param]
     jmp .done
 .not_sep:
     cmp al,'?'
@@ -128,9 +140,15 @@ ansi_putc:
     mov byte [ansi_private],1
     jmp .done
 .final:
+    cmp al,0x40
+    jb .done               ; ignore intermediate bytes, retain CSI state
     mov byte [ansi_state],0
+    cmp al,0x7e
+    ja .done
+    cmp byte [ansi_param],ANSI_MAX_PARAMS
+    jae .done              ; reject the entire overlong sequence
     cmp byte [ansi_private],0
-    jne .done                 ; CSI ?25h/l accepted as no-op
+    jne .done              ; CSI ?25h/l accepted as no-op
     cmp al,'A'
     je .up
     cmp al,'B'
@@ -199,26 +217,16 @@ ansi_putc:
     call ansi_raw_tracked
     jmp .done
 .position:
-    mov al,[ansi_p1]
-    or al,al
-    jnz .pos_row
-    mov al,1
-.pos_row:
-    mov ah,[ansi_p2]
-    or ah,ah
-    jnz .pos_col
-    mov ah,1
-.pos_col:
-    call ansi_goto
-    jmp .done
+    mov ax,[ansi_p1]
+    jmp .goto_done
 .column:
     mov al,[ansi_row]
     mov ah,[ansi_p1]
-    call ansi_goto
-    jmp .done
+    jmp .goto_done
 .row:
     mov al,[ansi_p1]
     mov ah,[ansi_col]
+.goto_done:
     call ansi_goto
     jmp .done
 .erase_display:
@@ -314,15 +322,29 @@ ansi_putc:
     call ansi_goto
     jmp .done
 .sgr:
-    mov al,[ansi_p1]
+    mov di,ansi_p1
+    xor ch,ch
+    mov cl,[ansi_param]
+    inc cx
+.sgr_loop:
+    mov al,[di]
+    inc di
     call ansi_sgr_param
-    cmp byte [ansi_second],0
-    je .sgr_finish
-    mov al,[ansi_p2]
-    call ansi_sgr_param
-.sgr_finish:
+    loop .sgr_loop
     call ansi_apply_attr
 .done:
+    and word [bp+14],0xfffe ; saved FLAGS (7 saved registers)
+    jmp short .restore_frame
+.failed:
+    ; BP is the saved-register frame established by ansi_putc.
+    ; Discard only private helper return addresses. No helper changes
+    ; BP/SS or owns resources outside this frame. The transport has
+    ; already returned and restored its own registers before we get here.
+    mov sp,bp
+    mov byte [ansi_state],0
+    or word [bp+14],1     ; report the failure in the saved CF
+.restore_frame:
+    pop bp
     pop di
     pop si
     pop dx
@@ -332,9 +354,10 @@ ansi_putc:
     popf
     ret
 
-; Raw native output: no parser recursion.
+; Raw native output: private to ansi_putc; no parser recursion.
 ansi_raw:
     call local_native_putc
+    jc ansi_putc.failed
     ret
 
 ansi_count:
@@ -364,16 +387,16 @@ ansi_goto:
     jbe .maxcol
     mov ah,ANSI_COLS
 .maxcol:
-    mov [ansi_row],al
-    mov [ansi_col],ah
+    mov bx,ax
     mov al,0x12
     call ansi_raw
-    mov al,[ansi_col]
+    mov al,bh
     dec al
     call ansi_raw
-    mov al,[ansi_row]
+    mov al,bl
     dec al
     call ansi_raw
+    mov [ansi_row],bx       ; commit tracked row/column only on success
     ret
 
 ansi_clear_home:
@@ -389,23 +412,19 @@ ansi_eol:
     mov al,ANSI_ESC
     call ansi_raw
     mov al,'T'
-    call ansi_raw
-    ret
+    jmp ansi_raw
 
 ; CL=number of cells to blank, never move caller's cursor permanently.
 ansi_spaces:
     mov bl,ANSI_COLS+1
     sub bl,[ansi_col]
-    cmp cl,bl
-    jbe .limited
-    mov cl,bl
-.limited:
     or cl,cl
     jz .end
+    cmp cl,bl
+    jae ansi_eol           ; avoid wrap/scroll at the right margin
 .space:
     mov al,' '
     call ansi_raw
-    inc byte [ansi_col]
     dec cl
     jnz .space
 .end:
@@ -415,6 +434,10 @@ ansi_spaces:
 ansi_raw_tracked:
     mov dl,al
     call ansi_raw
+    cmp dl,9
+    je .tab
+    cmp dl,12
+    je .home
     cmp dl,13
     je .cr
     cmp dl,10
@@ -444,6 +467,17 @@ ansi_raw_tracked:
     jmp .end
 .inc_col:
     inc byte [ansi_col]
+    jmp .end
+.tab:
+    mov al,[ansi_col]
+    dec al
+    and al,0xf8
+    add al,9
+    cmp al,ANSI_COLS
+    jbe .tab_store
+    mov al,ANSI_COLS
+.tab_store:
+    mov [ansi_col],al
     jmp .end
 .cr:
     mov byte [ansi_col],1
@@ -545,15 +579,15 @@ ansi_apply_attr:
     mov al,'G'
     call ansi_raw
     mov al,[ansi_attr]
-    call ansi_raw
-    ret
+    jmp ansi_raw
 
 ansi_color_map db 0,2,4,6,1,3,5,7
 ansi_state db 0
-ansi_second db 0
+ansi_param db 0
 ansi_private db 0
 ansi_p1 db 0
 ansi_p2 db 0
+    times ANSI_MAX_PARAMS-2 db 0
 ansi_row db 1
 ansi_col db 1
 ansi_save_row db 1
