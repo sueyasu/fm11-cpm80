@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Check both assembled CBIOS extension vectors and mailbox command ABI."""
 from pathlib import Path
+import sys
 
 BASE = 0xF200
-for path in (Path("build/z80/bios.bin"), Path("build/i8086/bios.bin")):
+paths = [Path(p) for p in sys.argv[1:]] or [Path("build/z80/bios.bin"), Path("build/i8086/bios.bin")]
+for path in paths:
     bios = path.read_bytes()
     assert len(bios) <= 0x400, path
     for off in range(0, 19 * 3, 3):

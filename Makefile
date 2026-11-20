@@ -147,3 +147,45 @@ $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88: $(I8086_BUILD)/ipl_2hd.bin $(I8086_BUILD
 .PHONY: test-cache-api
 test-cache-api: bios bios8088
 	$(PYTHON) tests/check_cache_api.py
+
+# NEC V20 8080 emulation mode; no optional Z80 card required.
+V20_BUILD := $(BUILD)/v20
+BIOS_V20 := cpm22/bios/cpu_v20.asm
+.PHONY: imagev20 imagev20-2d imagev20-2hd biosv20 systemv20 ioserverv20 iplv20 test-v20
+biosv20: $(V20_BUILD)/bios.bin
+systemv20: $(V20_BUILD)/system62.bin
+ioserverv20: $(V20_BUILD)/ioserver.bin
+iplv20: ipl8088
+imagev20: imagev20-2d imagev20-2hd
+
+$(V20_BUILD):
+	mkdir -p $@
+
+$(V20_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_V20) Makefile | $(V20_BUILD)
+	cat $(BIOS_COMMON) $(BIOS_V20) > $(V20_BUILD)/bios.asm
+	$(ASM8080) $(V20_BUILD)/bios.asm -o$(basename $@)
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x400 --name "V20 8080 BIOS"
+
+$(V20_BUILD)/system62.bin: $(CPM22_CORE) $(V20_BUILD)/bios.bin tools/mksystem.py | $(V20_BUILD)
+	$(PYTHON) tools/mksystem.py --core $(CPM22_CORE) --bios $(V20_BUILD)/bios.bin --output $@
+
+$(V20_BUILD)/ioserver.bin: i8086/ioserver.asm $(wildcard i8086/*.inc) Makefile | $(V20_BUILD)
+	$(NASM) -DFM11_V20=1 -f bin -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "V20 native I/O server"
+
+V20_D88_2D := $(IMAGE_BUILD)/fm11-cpm80-v20-2d.d88
+V20_RAW_2D := $(IMAGE_BUILD)/fm11-cpm80-v20-2d.raw
+V20_D88_2HD := $(IMAGE_BUILD)/fm11-cpm80-v20-2hd.d88
+V20_RAW_2HD := $(IMAGE_BUILD)/fm11-cpm80-v20-2hd.raw
+
+imagev20-2d: $(V20_D88_2D) $(V20_RAW_2D)
+$(V20_D88_2D) $(V20_RAW_2D) &: $(I8086_BUILD)/ipl_2d.bin $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2d_d88.py --ipl $(I8086_BUILD)/ipl_2d.bin --system $(V20_BUILD)/system62.bin --ioserver $(V20_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $(V20_D88_2D) --raw-output $(V20_RAW_2D) --label "FM11 CPM80 V20"
+
+imagev20-2hd: $(V20_D88_2HD) $(V20_RAW_2HD)
+$(V20_D88_2HD) $(V20_RAW_2HD) &: $(I8086_BUILD)/ipl_2hd.bin $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2hd_d88.py --ipl $(I8086_BUILD)/ipl_2hd.bin --system $(V20_BUILD)/system62.bin --ioserver $(V20_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $(V20_D88_2HD) --raw-output $(V20_RAW_2HD) --label "FM11 CPM80 V20"
+
+test-v20: imagev20
+	$(PYTHON) tests/check_cache_api.py $(V20_BUILD)/bios.bin
+	$(PYTHON) tests/check_v20.py $(V20_BUILD) $(I8086_BUILD) $(IMAGE_BUILD)

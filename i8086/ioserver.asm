@@ -6,7 +6,11 @@ org 0
 %include "i8086/memory.inc"
 %include "i8086/mailbox.inc"
 
+%ifdef FM11_V20
+%include "i8086/cpu_v20.inc"
+%else
 %include "i8086/cpu_z80.inc"
+%endif
 
 ; Common cold initialization.
 ; IN: AL=boot drive (0 or 4), DS=CS=native segment, ES=CPM_SEG,

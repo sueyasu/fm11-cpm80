@@ -1,6 +1,6 @@
 # FM-11 CP/M-80
 
-CP/M 2.2 for the Fujitsu FM-11 with the Z80 card.
+CP/M 2.2 for the Fujitsu FM-11 with the Z80 card or NEC V20 8080 emulation mode.
 
 - 62K system: CCP at DC00h, BDOS entry at E406h, BIOS at F200h.
 - Fixed drive letters: A:-D: = 2D units 0-3; E:-H: = 2HD units 0-3, as in FM-11 CP/M-86.
@@ -16,7 +16,9 @@ no external core binary is required. See [docs/build.md](docs/build.md).
 Optional COM files in external/commands/ are included in both images.
 
 Experimental 8088+Z80 target: install NASM and run `make image8088`.
-See [docs/8088-z80.md](docs/8088-z80.md). The default build is unchanged.
+See [docs/8088-z80.md](docs/8088-z80.md).
+V20 target (no Z80 card): install NASM and run `make imagev20`.
+See [docs/v20.md](docs/v20.md). The default build is unchanged.
 
 ## Accessing RAW images with cpmtools
 
@@ -28,7 +30,7 @@ cpmls -f fm11-cpm80-2d build/images/fm11-cpm80-2d.raw
 cpmls -f fm11-cpm80-2hd build/images/fm11-cpm80-2hd.raw
 ```
 
-The same definitions apply to the experimental 8088+Z80 RAW images.
+The same definitions apply to the 8088+Z80 and V20 RAW images.
 They do not apply directly to D88 files.
 
 ## Boot drive and SUBMIT
