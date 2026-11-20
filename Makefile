@@ -95,9 +95,9 @@ $(D88_IMAGE_2HD): $(M6809_BUILD)/ipl_2hd.bin $(CPM_BUILD)/system62.bin $(M6809_B
 
 core: $(CPM22_CORE)
 
-$(CPM22_CORE): cpm22/cpm22_fm11.asm | $(CPM_BUILD)
-	$(ASM8080) $< -o$(basename $@)
-	@test "$$(stat -c%s $@)" -eq 5632 || { echo "$@: got $(stat -c%s $@) bytes, expected 5632 bytes" >&2; exit 1; }
+$(CPM22_CORE): cpm22/cpm22_fm11.asm tools/pad_core.py Makefile | $(CPM_BUILD)
+	$(ASM8080) $< -o$(CPM_BUILD)/ccpbdos62-unpadded
+	$(PYTHON) tools/pad_core.py $(CPM_BUILD)/ccpbdos62-unpadded.bin $@
 
 $(FUJITSU_CPM_IMAGE):
 	@echo "error: missing $@" >&2
