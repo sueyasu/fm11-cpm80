@@ -199,3 +199,17 @@ hdd-data:
 test-hdd-data: bios8088 biosv20 ioserver8088 ioserverv20
 	$(PYTHON) tests/check_cache_api.py $(I8086_BUILD)/bios.bin $(V20_BUILD)/bios.bin
 	PYTHONPATH=tools $(PYTHON) tests/check_hdd_geometry.py
+
+# Disposable high-address HDD regression fixture; not a release command.
+HDD_TEST_BUILD := $(BUILD)/hddtest
+HDD_TEST_IMAGE ?= $(IMAGE_BUILD)/fm11-cpm80-m2243b-test.img
+.PHONY: hdd-tail-test verify-hdd-tail
+$(HDD_TEST_BUILD):
+	mkdir -p $@
+$(HDD_TEST_BUILD)/HDDTEST.COM: tests/hddtest.asm Makefile | $(HDD_TEST_BUILD)
+	$(ASM8080) $< -o$(HDD_TEST_BUILD)/hddtest
+	cp $(HDD_TEST_BUILD)/hddtest.bin $@
+hdd-tail-test: $(HDD_TEST_BUILD)/HDDTEST.COM
+	$(PYTHON) tools/mk_hdd_tail_test.py create $(HDD_TEST_IMAGE) $<
+verify-hdd-tail: $(HDD_TEST_BUILD)/HDDTEST.COM
+	$(PYTHON) tools/mk_hdd_tail_test.py verify $(HDD_TEST_IMAGE) $<
