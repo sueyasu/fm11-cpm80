@@ -21,8 +21,9 @@ raw_service:
     mov ax,[raw_tracks]
     xchg al,ah
     mov [es:MBOX_TRACK],ax
-    mov al,[raw_n]
-    mov ah,[raw_spt]
+    ; Little-endian AX store: AL goes to SECTOR_H, AH to SECTOR_L.
+    mov al,[raw_spt]
+    mov ah,[raw_n]
     mov [es:MBOX_SECTOR],ax
     mov al,[raw_heads]
     mov [es:MBOX_DATA],al

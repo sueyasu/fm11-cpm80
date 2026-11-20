@@ -75,6 +75,8 @@ INIT    LXI D,MSGSTART
         STA SECNO
         CALL GEOMETRY
         CALL CHECKGEOM
+        LXI D,MSGGEOPASS
+        CALL PRINT
         LXI D,MSGFIRST
         CALL PRINT
         CALL READCHECK
@@ -171,7 +173,7 @@ PHYS    PUSH PSW
 GEOMETRY MVI A,7
         CALL PHYS
         ORA A
-        JNZ FAIL
+        JNZ GEOFAIL
         LDA 0FBFAH
         MOV H,A
         LDA 0FBFBH
@@ -179,7 +181,7 @@ GEOMETRY MVI A,7
         SHLD TOTAL
         MOV A,H
         ORA L
-        JZ FAIL
+        JZ GEOFAIL
         LDA 0FBF9H
         STA HEADS
         LDA 0FBFCH
@@ -187,7 +189,7 @@ GEOMETRY MVI A,7
         LDA 0FBFDH
         STA NVAL
         CPI 2
-        JNC FAIL
+        JNC GEOFAIL
         LXI H,128
         ORA A
         JZ SETSIZE
@@ -199,52 +201,55 @@ CHECKGEOM LDA TARGET
         JZ GEOHDD
         LDA HEADS
         CPI 2
-        JNZ FAIL
+        JNZ GEOFAIL
         LDA TARGET
         CPI 4
         JNC GEOHD
         LDA SPT
         CPI 16
-        JNZ FAIL
+        JNZ GEOFAIL
         LDA NVAL
         CPI 1
-        JNZ FAIL
+        JNZ GEOFAIL
         LHLD TOTAL
         LXI D,80
         JMP GEOCMP
 GEOHD   LDA SPT
         CPI 26
-        JNZ FAIL
+        JNZ GEOFAIL
         LHLD TRK
         MOV A,H
         ORA L
         JNZ GEOHDN1
         LDA NVAL
         ORA A
-        JNZ FAIL
+        JNZ GEOFAIL
         JMP GEONORMAL
 GEOHDN1 LDA NVAL
         CPI 1
-        JNZ FAIL
+        JNZ GEOFAIL
 GEONORMAL LHLD TOTAL
         LXI D,154
 GEOCMP  MOV A,H
         CMP D
-        JNZ FAIL
+        JNZ GEOFAIL
         MOV A,L
         CMP E
-        JNZ FAIL
+        JNZ GEOFAIL
         RET
 GEOHDD  LDA SPT
         CPI 32
-        JNZ FAIL
+        JNZ GEOFAIL
         LDA NVAL
         CPI 1
-        JNZ FAIL
+        JNZ GEOFAIL
         LDA HEADS
         CPI 2
-        JC FAIL
+        JC GEOFAIL
         RET
+GEOFAIL LXI D,MSGGEOBAD
+        CALL PRINT
+        JMP FAIL
 ; Two reads with different initial buffer contents must match.
 READCHECK LXI H,BUFFER
         LXI B,256
@@ -399,6 +404,8 @@ MATCH   MOV A,M
 MSGSTART DB 'FM-11 physical disk API test',13,10,24H
 MSGCPU DB 'CPU type: ',24H
 MSGREJECT DB 'PASS: invalid operation and drive rejected',13,10,24H
+MSGGEOPASS DB 'PASS: physical geometry',13,10,24H
+MSGGEOBAD DB 'FAIL: physical geometry',13,10,24H
 MSGFIRST DB 'Reading first side-track',13,10,24H
 MSGLAST DB 'Reading last side-track',13,10,24H
 MSGFMT0 DB 'Formatting and verifying first side-track',13,10,24H
