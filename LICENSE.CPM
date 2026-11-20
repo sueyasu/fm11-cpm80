@@ -1,12 +1,36 @@
 CP/M 2.2 Copyright and License
+=================================
+
+This distribution contains a modified CP/M 2.2 CCP/BDOS core
+originally developed by Digital Research, Inc. The core is based on
+the reconstruction by Clark A. Calkins (February 27, 1981), adapted
+from the PC-9801 CP/M-80 project. See cpm22/cpm22_fm11.asm.
+
+CP/M and its derivatives are made available under the permission
+granted by Bryan Sparks, President of DRDOS, Inc., as clarified on
+July 9, 2022.
+
+The current CP/M license information is available at:
+
+    http://www.cpm.z80.de/license.html
+
+The 2022 permission grants a nonexclusive right to use, distribute,
+modify, enhance, and otherwise make available CP/M and its
+derivatives.
+
+CP/M is not placed in the public domain by this distribution.
+Copyright and other rights in the original CP/M materials remain
+with their respective rights holder(s).
+
+The FM-11-specific bootstrap, CBIOS, utilities, and other
+original files in this distribution are separate works and are
+licensed under the terms stated elsewhere in this package.
+
+FM-11-specific Software
 =============================
 
-This distribution contains CP/M 2.2 CCP/BDOS reconstructed by Clark A.
-Calkins and adapted from the PC-9801 CP/M-80 port. CP/M was originally
-developed by Digital Research, Inc.
+The FM-11 bootstrap, CBIOS, and related source code written
+for this project are Copyright (c) 2026 SUEYASU Taizo.
 
-CP/M and its derivatives are made available under the permission granted
-by Bryan Sparks, President of DRDOS, Inc., as clarified on July 9, 2022.
-See http://www.cpm.z80.de/license.html for the license information.
-CP/M is not placed in the public domain; original rights are retained.
-The original FM-11-specific code remains under LICENSE.
+These original components are released under the MIT License.
+See LICENSE for details.
