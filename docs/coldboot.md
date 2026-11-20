@@ -1,7 +1,9 @@
-# Cold boot
+# Cold boot (6809+Z80 FDD path)
 
-The FM-11 2D boot path uses a ROM-loaded MC6809 IPL followed by the resident
-MC6809 I/O server.  The key rule is that the IPL itself never leaves cylinder 0.
+This document details the MC6809 2D/2HD floppy boot path.
+The 6809+Z80 HDD, 8088+Z80 and V20 boot paths are described in
+[boot-hdd.md](boot-hdd.md), [8088-z80.md](8088-z80.md) and
+[v20.md](v20.md). The floppy IPL remains in cylinder 0.
 
 ## ROM-loaded IPL
 
@@ -55,10 +57,11 @@ $0100-$DBFF   TPA (54.75 KiB)
 $DC00-$E3FF   CCP
 $E400-$F1FF   BDOS
 $F200-$F5FF   BIOS slot
-$F600-$F95F   free / BIOS stack (SP=F960)
+$F600-$F800   HDD ALV (513 bytes)
+$F801-$F95F   remaining space / BIOS stack (SP=F960)
 $F970-$FBE7   DIRBUF / CSV / ALV workspace
-$FBF4         logical boot drive (0 or 4)
-$FBF5         boot controller family
+$FBF4         logical boot drive (0=A, 4=E, 8=I)
+$FBF5         boot type (0=2D, 1=2HD, 2=HDD)
 $FBF6-$FBFF   shared mailbox
 $FC00-$FFFF   memory-mapped I/O
 ```
@@ -89,8 +92,9 @@ $F970-$F9EF   DIRBUF
 $F9F0-$FAEF   CSV0-CSV7
 $FAF0-$FBE7   ALV0-ALV7
 $FBE8-$FBF3   reserved / free
-$FBF4         boot drive (0=A, 4=E)
-$FBF5         boot controller family
+$F600-$F800   HDD ALV (outside the floppy CSV/ALV range)
+$FBF4         boot drive (0=A, 4=E, 8=I)
+$FBF5         boot type (0=2D, 1=2HD, 2=HDD)
 $FBF6-$FBFF   mailbox
 ```
 

@@ -4,10 +4,11 @@ CON: defaults to CRT. TTY and BAT use USART0; UC1 polls both local and
 serial input, alternates when both are ready, and mirrors output with a
 bounded USART wait. LIST/PUNCH/READER remain serial; LISTST reports TXRDY.
 
-USART0 initialization and all serial I/O now run in the native 6809 service.
+USART0 initialization and serial I/O run in the native I/O server
+(6809 or 8088/V20).
 The CBIOS only selects the IOBYTE device and passes commands through the
 mailbox. TTY/BAT/READER input and ordinary output wait in the server, with one
-CPU hand-off per operation. CONST and LISTST are nonblocking and return
+native-service invocation per operation (FD05 on Z80, CALLN on V20). CONST and LISTST are nonblocking and return
 00h/FFh. UC1 output uses a separate bounded mirror command, with 65535 polls
 maximum; the real timeout differs from the former Z80 loop. A mirror timeout
 is not retried. Cold boot initializes the USART; WBOOT does not reset it.
@@ -19,9 +20,9 @@ return mailbox failure; CONOUT cannot report an error to BDOS and does
 not replay partially transmitted escape sequences. A timeout may still
 leave the physical display state uncertain.
 
-The 6809 resident stack starts at logical F000 (grows into E800-EFFF,
+On 6809+Z80, the resident stack starts at logical F000 (grows into E800-EFFF,
 private physical 11800-11FFF). The default build assembles the resident
-source directly, with the two-window write-back floppy cache always enabled.
+source directly, with the two-window write-back disk cache always enabled (2D/2HD/HDD).
 The cache uses physical 12000-15FFF (within the minimum 128 KiB RAM
 configuration). The private resident stack and the 6 KiB I/O-server
 disk-slot size check (D000-E7FF, physical 10000-117FF) are unchanged.

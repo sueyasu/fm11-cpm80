@@ -1,6 +1,8 @@
-# FM-11 Z80-card hardware assumptions
+# FM-11 CP/M-80 hardware assumptions
 
-This project targets the FM-11 Z80 card as described by hardware analysis and cross-checked against Fujitsu's CP/M-80 image where possible.
+The 6809+Z80 and 8088+Z80 versions use the Z80 card; the V20 version
+runs CP/M in 8080 emulation mode without the Z80 card. The native CPU
+controls disk, DMA, console and serial hardware.
 
 ## Z80 memory view
 
@@ -14,10 +16,10 @@ The bank register at `$FD2F` affects only the middle 32 KiB window:
 - `C000-FBFF`: fixed RAM
 - `FC00-FFFF`: memory-mapped I/O
 
-`x` is selected by the low four bits of `$FD2F`. This banking model is not yet
-required by CP/M 2.2 but is retained for a possible CP/M 3 port.
+`x` is selected by the low four bits of `$FD2F`. The Z80 backends initialize the mapping to bank 0 (6809) or bank 1
+(8088); V20 instead uses segment 1000h and CALLN.
 
-The shared Z80/6809 mailbox occupies the highest ten bytes of Z80-visible RAM,
+The shared native I/O service mailbox occupies the highest ten bytes of CP/M RAM,
 `$FBF6-$FBFF`.
 
 ## 6809 private I/O-server memory
@@ -50,20 +52,21 @@ At reset the Z80 is held in WAIT. The main CPU starts execution.
 - main CPU writes `$FD05` bit 0 = 1: main CPU stops, Z80 starts
 - Z80 writes `$FD05` bit 0 = 0: Z80 stops, main CPU resumes
 
-The resident 6809 I/O service relies on this deterministic hand-off.
+Both Z80-card backends use this deterministic hand-off. V20 uses
+CALLN/IRET and does not switch to an optional Z80 card.
 
-## Z80-visible I/O used initially
+## Guest-visible I/O
 
-The project deliberately uses only interfaces known to be appropriate from the Z80 side:
+The Z80-card backend uses these interfaces directly:
 
 - `$FD05` CPU arbitration
 - `$FD2F` Z80 bank register
 - shared memory/status interfaces where documented
 
 FDC, DMA, USART0 and 6809 MMR registers are owned by the main CPU service
-rather than accessed directly by the Z80. The two direct Z80 hardware
-operations (bank initialization and CPU hand-off) live only in the
-Z80-specific CBIOS backend `cpm22/bios/cpu_z80.asm`.
+rather than accessed directly by the Z80. The Z80 CPU hand-off is in `cpu_z80.asm`, while bank initialization
+is in `init_z80_6809.asm` or `init_z80_8088.asm`. V20's separate
+`cpu_v20.asm` backend invokes the native CALLN gateway.
 
 ## Floppy controllers
 
@@ -72,12 +75,15 @@ The Fujitsu CP/M image confirms two controller bases:
 - `$FD18`: Mini FDC, used for 2D drives
 - `$FD30`: Standard FDC, used for 2HD drives
 
-The initial logical mapping is intentionally compatible with Fujitsu CP/M:
+The logical drive mapping is compatible with Fujitsu CP/M:
 
 - A:-D: 2D units 0-3
 - E:-H: 2HD units 0-3
 
-Bubble memory and HDD support are not part of the initial target.
+MDC HDD drive I: uses DMA channel 2; 2D/2HD FDCs use DMA 0/1.
+Nine HDD models are supported; bubble memory is not.
+See [hdd-data.md](hdd-data.md) and [boot-hdd.md](boot-hdd.md).
+The FM-11 standard ROM is used for all boot media.
 
 ## DRAM refresh
 

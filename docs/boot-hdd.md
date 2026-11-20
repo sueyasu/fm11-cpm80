@@ -6,7 +6,7 @@ supported by design for all three CPU backends.
 
 | Physical LBA (256 bytes) | Contents |
 |---|---|
-| 0–1 | Shared 512-byte HDD IPL |
+| 0–1 | 512-byte HDD IPL (CPU-specific) |
 | 2–25 | 6 KiB native server, specific to CPU backend |
 | 26–51 | 0x1a00-byte CCP/BDOS/CBIOS, specific to backend |
 | 52 to end of cylinder 0 | Reserved (E5h) |
@@ -29,8 +29,8 @@ the ROM disk-read entry FF00:001B and jumps to 07C0:0000 at FF00:0393.
 The IPL initializes its own stack and segments, conditionally initializes
 USART0 as the FDD IPL does, and explicitly selects binary LBA / DMA2.
 The original ROM performs device selection via FD23 DIP switches.
-This handoff has been checked statically; emulator boot testing remains
-necessary. No original ROM bytes are included in this repository.
+This ROM/IPL handoff and boot on 8088+Z80 and V20 have been confirmed
+in the FM-11 emulator. No original ROM bytes are included in this repository.
 
 ## Build
 
@@ -76,8 +76,8 @@ SUBMIT uses the actual boot drive I: as before.
 
 Use separate images for the two CPU backends; their resident and
 CBIOS code are different. Do not mount the same image concurrently.
-Do not overwrite a data HDD with the image builder; FORMAT /S is
-planned separately. The same original ROM is used for FDD and HDD
+Do not overwrite a data HDD with the image builder; the common
+FORMAT.COM now supports `FORMAT HDD /S` on a disposable target. The same original ROM is used for FDD and HDD
 boot, according to the DIP switches.
 
 ## 6809 + Z80
@@ -101,4 +101,4 @@ boot6809.bin, [DIPSW] main_cpu=6809 and HDD=true, [optional_cpu]
 type=z80; retain normal display/ROM configuration. Then boot with
 fm11-sdl --config as usual. Initial prompt I:. Verify DIR, PIP,
 Ctrl-C, and persistence. Also run the M2243B last-block test
-described in hdd-data.md because this is a new native transport.
+described in hdd-data.md because this is a native transport regression check.

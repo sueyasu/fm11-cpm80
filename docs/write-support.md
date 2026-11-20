@@ -1,6 +1,7 @@
-# 2D disk write support
+# Disk write support (2D, 2HD and HDD)
 
-The FM-11 CP/M BIOS presents 128-byte logical sectors, while the Mini FDC transfers 256-byte physical sectors. Therefore a BIOS WRITE cannot directly overwrite one physical sector without preserving the neighbouring CP/M record.
+The FM-11 CP/M BIOS presents 128-byte logical sectors, while FDD
+and HDD normal data tracks transfer 256-byte physical sectors. Therefore a BIOS WRITE cannot directly overwrite one physical sector without preserving the neighbouring CP/M record.
 
 Both native I/O servers perform cached read/modify/write:
 
@@ -18,7 +19,8 @@ Mini FDC transfers use DMA channel 0. `PhysBuf` remains necessary because CP/M r
 
 The CP/M WRITE type passed in register C is retained in `MBOX_FLAGS`. All types preserve the neighbouring record; only directory writes impose the immediate flush barrier.
 
-Drives E:-H: use the equivalent Standard FDC / DMA channel 1 path. Drive letters remain fixed regardless of the boot controller.
+Drives E:-H: use the equivalent Standard FDC / DMA channel 1 path.
+Drive I: uses MDC DMA channel 2 with 24-bit physical LBA addressing. Drive letters remain fixed regardless of the boot controller.
 
 ## Physical floppy positioning
 
@@ -26,7 +28,7 @@ The 6809 I/O server maintains independent cylinder positions for the four Mini F
 
 ## Cache synchronization
 
-Both CPU configurations expose CACHE_SYNC (F233h) and CACHE_RESET (F236h).
+All three CPU configurations expose CACHE_SYNC (F233h) and CACHE_RESET (F236h).
 Both flush two write-back windows. CACHE_RESET additionally clears cache
 and saved cylinder positions after successful synchronization. Both report
 A/Z status. Failed write-back retains unwritten dirty bits and prevents

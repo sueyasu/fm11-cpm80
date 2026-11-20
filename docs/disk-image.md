@@ -14,8 +14,8 @@ build/images/fm11-cpm80-2d.raw
 build/images/fm11-cpm80-2hd.raw
 ```
 
-Both images are bootable. A:-D: map to the controller family used at boot;
-E:-H: map to the other family.
+Both images are bootable. A:–D: always map to 2D FDDs and E:–H:
+always map to 2HD FDDs, regardless of the boot medium. I: is the HDD.
 
 ## 2D geometry
 
@@ -47,7 +47,9 @@ The active system layout is:
 5000-      file data (allocation block 2 onward)
 ```
 
-Cylinder 0 is therefore exclusively the 6809 boot environment. The ROM-loaded
+For the default `make image` target, cylinder 0 contains the 6809
+boot environment; 8088/V20 images contain their corresponding native
+server instead. The ROM-loaded
 IPL stays on cylinder 0 and loads T0/H0/S3-S16 and T0/H1/S1-S10,
 the 24-sector I/O-server slot. The IPL never performs a SEEK or STEP.
 
@@ -105,6 +107,14 @@ DRM=127     128 directory entries
 AL0=80h     directory uses block 0
 OFF=2       two reserved cylinders
 ```
+
+## Other CPU variants and HDD images
+
+Use `make image8088` for 8088+Z80 or `make imagev20` for NEC V20.
+Both create corresponding 2D/2HD D88 and RAW images with the same disk
+layout. Use `make imagehdd`, `make image8088-hdd` or `make imagev20-hdd`
+for whole-HDD images; see [boot-hdd.md](boot-hdd.md). All boot variants
+use the original FM-11 ROM.
 
 ## Adding CP/M commands
 

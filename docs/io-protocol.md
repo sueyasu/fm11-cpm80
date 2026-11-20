@@ -34,14 +34,15 @@ by `cpm22/bios/cpu_z80.asm` (CPU_IOCALL) and the target-specific
   Selects Z80 bank 0 for 6809 or bank 1 for 8088; not called on WBOOT.
 - `CPU_IOCALL`: called with a complete mailbox request already posted.
   Returns only after native service completion. The main CPU may be 6809
-  or 8088 when using a Z80 card; a future V20 backend can instead use CALLN.
+  or 8088 when using a Z80 card; the implemented V20 backend uses CALLN.
 
 Both hooks preserve BC, DE, HL and the caller's stack; A and flags may be
 clobbered. The backend owns interrupt handling (Z80 retains DI, hardware
 handoff, NOP, EI). The common MBOX_EXEC reads STATUS and sets A/Z after
 return; the backend does not interpret or erase the result. Mailbox addresses
 are CP/M logical addresses and must resolve to the same shared memory on
-both sides. No new CPU target is implemented by this change.
+both sides. The V20 hook is `cpm22/bios/cpu_v20.asm`; CPU_INIT returns directly,
+CPU_IOCALL invokes CALLN 41h, and the native gateway returns with IRET.
 
 ## Mailbox
 
@@ -70,6 +71,11 @@ If the protocol later needs more fields, the mailbox can grow downward from `$FB
 - `04` CACHE_SYNC: write all pending sectors, retain valid cache and FDC positions
 - `05` CACHE_RESET: synchronize, then invalidate all cache entries and FDC positions
 - `06` HDD_GEOM: all native servers; TRACK=DSM, SECTOR=OFF, both big-endian
+- `07` RAW_GEOM (F239h physical API)
+- `08` RAW_READ (one physical sector)
+- `09` RAW_WRITE (one physical sector)
+- `0A` RAW_FORMAT (FDD WRITE TRACK)
+- `0B` CPU_TYPE (0=6809+Z80, 1=8088+Z80, 2=V20)
 
 
 - `10` local console status (DATA=00h/FFh)
@@ -84,18 +90,19 @@ If the protocol later needs more fields, the mailbox can grow downward from `$FB
 For all console commands, STATUS=00h indicates successful service completion;
 DATA is separate from STATUS. Serial input is masked to seven bits by the
 CBIOS, as before. Serial initialization is native cold-boot work, not a
-mailbox command. The command numbers and byte layout are shared ABI for
-future 8088+Z80 and V20 targets.
+mailbox command. The command numbers and byte layout are common to all three implemented
+CPU configurations.
 
 ## Cache extension ABI
 
-Two FM-11 extension JMP vectors follow the 17 standard CP/M 2.2 BIOS
-vectors. Both 6809+Z80 and 8088+Z80 builds use identical offsets:
+Three FM-11 extension JMP vectors follow the 17 standard CP/M 2.2 BIOS
+vectors. All three builds use identical offsets:
 
 | API | BIOS-relative offset | Current address | Mailbox CMD |
 |---|---|---|---|
 | CACHE_SYNC | 0033h | F233h | 04h |
 | CACHE_RESET | 0036h | F236h | 05h |
+| RAW_DISK_API | 0039h | F239h | 07h–0Bh |
 
 Call with no arguments. A=00h, Z=1 on success; A=01h, Z=0 on error.
 BC/DE/HL and SP are preserved. Other flags are unspecified; do not test
@@ -113,8 +120,9 @@ position unknown to force a retry to re-home it.
 WBOOT calls the native cache-reset operation before reloading CCP/BDOS;
 on failure it returns an error and the existing CBIOS retry path is used.
 
-A direct-I/O utility must call CACHE_RESET successfully before bypassing
-the BIOS, and again after direct I/O (before subsequent BIOS disk access).
+The RAW_DISK_API validates the guest buffer and flushes/invalidates the
+cache automatically before each physical transfer. A separate utility
+bypassing RAW_DISK_API must explicitly synchronize and reset the cache.
 Synchronize before replacing/removing media or shutting down an emulator;
 reset before a media change to discard old cached data and position state.
 These are FM-11-specific extensions, not standard CP/M 2.2 BIOS calls.
@@ -126,17 +134,21 @@ before and after the update.
 
 ## Division of responsibility
 
-The Z80 BIOS keeps the current CP/M drive, track, sector and DMA address. `READ` and `WRITE` copy these parameters to the mailbox and hand control to the 6809.
+The common CBIOS keeps the CP/M drive, track, sector and DMA address.
+`READ` and `WRITE` post mailbox parameters; the CPU-specific hook enters
+the 6809 or 8088 native server (or the V20 CALLN gateway).
 
-The 6809 service owns:
+The native 6809/8088 I/O service owns:
 
 - Mini FDC for 2D drives A:-D:
 - Standard FDC for 2HD drives E:-H:
+- MDC HDD I: and 24-bit LBA / DMA channel 2
 - physical 256-byte sector operations
 - 128/256-byte deblocking
 - DMA transfer and error handling
 - local console and USART0 initialization / serial I/O
-- CPU hand-off through the fixed-SRAM trampoline
+- CPU-specific hand-off (6809 fixed-SRAM trampoline, 8088 FD05 loop,
+  or V20 CALLN/IRET)
 
 ## Physical disk extension
 

@@ -1,6 +1,7 @@
 # MDC HDD data drive (6809+Z80, 8088+Z80 and V20)
 
-Boot from 2D or 2HD as usual. I: maps the entire single MDC HDD,
+Boot from 2D, 2HD or directly from HDD with the standard FM-11 ROM.
+I: maps the entire single MDC HDD,
 with the same filesystem as fm11-cpm86: 256-byte physical sectors,
 32 sectors/side-track, 64 logical records/track, 16 KiB blocks,
 EXM=7, DRM=511, AL0=80h, CKS=0. SENSE resolves the supported model,
@@ -27,7 +28,9 @@ the boot stack top; normal BDOS calls still use the separate BDOS stack.
 ## Build and test
 
 ```sh
-make image8088 imagev20
+make imagehdd HDD_MODEL=m2233b
+make image8088-hdd HDD_MODEL=m2233b
+make imagev20-hdd HDD_MODEL=m2233b
 make test-hdd-data
 make hdd-data HDD_MODEL=m2233b
 ```
@@ -37,8 +40,8 @@ build/images/fm11-cpm80-m2233b-data.img. It refuses to overwrite an
 existing image. Alternatively use a disposable copy of an existing
 CP/M-86 HDD image, not the original. Do not mount the same disk twice.
 
-In the emulator config, leave FDD boot enabled and HDD boot disabled,
-and add:
+To use the data-only image while booting from FDD, disable HDD boot
+selection in the emulator DIP switches and add:
 
 ```ini
 [hdd]
@@ -59,7 +62,9 @@ prepopulate a disposable image so that a file uses a block >=512
 also test random-write function 40 and the largest model. The
 geometry test checks the arithmetic model, not the assembled BDOS
 execution. Assembler size checks remain in the build. HDD boot is described in [boot-hdd.md](boot-hdd.md).
-FORMAT remains outside the current implementation.
+The common [FORMAT.COM](FORMAT.md) now initializes the HDD filesystem
+and can install an HDD boot system with `/S`; `/L` is not supported for HDD.
+See [format-api.md](format-api.md) for the physical access API.
 
 ## M2243B last-block regression
 
