@@ -66,7 +66,11 @@ If the protocol later needs more fields, the mailbox can grow downward from `$FB
 - `00` idle/no command
 - `01` read one CP/M 128-byte logical sector
 - `02` write one CP/M 128-byte logical sector
-- `03` warm-boot system reload
+- `03` warm-boot system reload (synchronize/reset cache before reload)
+- `04` CACHE_SYNC: write all pending sectors, retain valid cache and FDC positions
+- `05` CACHE_RESET: synchronize, then invalidate all cache entries and FDC positions
+
+
 - `10` local console status (DATA=00h/FFh)
 - `11` local console input (DATA=character)
 - `12` local console output (DATA=character)
@@ -81,6 +85,41 @@ DATA is separate from STATUS. Serial input is masked to seven bits by the
 CBIOS, as before. Serial initialization is native cold-boot work, not a
 mailbox command. The command numbers and byte layout are shared ABI for
 future 8088+Z80 and V20 targets.
+
+## Cache extension ABI
+
+Two FM-11 extension JMP vectors follow the 17 standard CP/M 2.2 BIOS
+vectors. Both 6809+Z80 and 8088+Z80 builds use identical offsets:
+
+| API | BIOS-relative offset | Current address | Mailbox CMD |
+|---|---|---|---|
+| CACHE_SYNC | 0033h | F233h | 04h |
+| CACHE_RESET | 0036h | F236h | 05h |
+
+Call with no arguments. A=00h, Z=1 on success; A=01h, Z=0 on error.
+BC/DE/HL and SP are preserved. Other flags are unspecified; do not test
+carry. Both operations apply to all drives and do not use or change the
+CBIOS-selected drive, track, sector or DMA address. Native services clear
+CMD and return STATUS as for existing commands. The standard jump table
+indices, ten-byte mailbox layout and CP/M geometry remain unchanged.
+
+Both native servers currently use write-through, so CACHE_SYNC succeeds
+without physical writes. CACHE_RESET also invalidates cache and remembered
+FDC head positions. A future write-back implementation must return failure
+if any dirty sector cannot be written, preserve unwritten dirty data, and
+must not invalidate cache or positioning state after a failed flush.
+WBOOT calls the native cache-reset operation before reloading CCP/BDOS;
+on failure it returns an error and the existing CBIOS retry path is used.
+
+A direct-I/O utility must call CACHE_RESET successfully before bypassing
+the BIOS, and again after direct I/O (before subsequent BIOS disk access).
+Synchronize before replacing/removing media or shutting down an emulator;
+reset before a media change to discard old cached data and position state.
+These are FM-11-specific extensions, not standard CP/M 2.2 BIOS calls.
+
+WRITE retains the CP/M write type in FLAGS: 0 normal, 1 directory, 2 first
+record of an unallocated block. No new fields are needed for write-back.
+At this stage all three continue to use write-through.
 
 ## Division of responsibility
 

@@ -8,3 +8,6 @@ MBOX_DATA equ 0xfbf9
 MBOX_TRACK equ 0xfbfa
 MBOX_SECTOR equ 0xfbfc
 MBOX_DMA equ 0xfbfe
+
+MBCMD_CACHE_SYNC equ 0x04
+MBCMD_CACHE_RESET equ 0x05

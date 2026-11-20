@@ -23,6 +23,8 @@ MBCMD_NONE      equ     $00
 MBCMD_READ      equ     $01
 MBCMD_WRITE     equ     $02
 MBCMD_WBOOT     equ     $03
+MBCMD_CACHE_SYNC equ    $04
+MBCMD_CACHE_RESET equ   $05
 MBCMD_LOCAL_CONST equ   $10
 MBCMD_LOCAL_CONIN equ   $11
 MBCMD_LOCAL_CONOUT equ  $12

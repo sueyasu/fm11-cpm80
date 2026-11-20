@@ -109,6 +109,10 @@ ServiceLoop
         lbeq     ServiceWrite
         cmpb    #MBCMD_WBOOT
         lbeq    ServiceWBoot
+        cmpb    #MBCMD_CACHE_SYNC
+        lbeq    ServiceCacheSync
+        cmpb    #MBCMD_CACHE_RESET
+        lbeq    ServiceCacheReset
         cmpb    #MBCMD_LOCAL_CONST
         lbeq    ServiceLocalConst
         cmpb    #MBCMD_LOCAL_CONIN
@@ -173,9 +177,21 @@ ServiceWriteFail
         lbsr    CacheInvalidate
         lbra    ServiceBad
 
+ServiceCacheSync
+        lbsr    CacheFlushAll
+        lbcs    ServiceBad
+        lbra    ServiceCacheOK
+
+ServiceCacheReset
+        lbsr    CacheReset
+        lbcs    ServiceBad
+ServiceCacheOK
+        clr     MBOX_STATUS
+        lbra    ServiceDone
+
 ServiceWBoot
-        lbsr    CacheInvalidate
-        lbsr    FdcInvalidatePositions
+        lbsr    CacheReset
+        lbcs    ServiceBad
         lbsr    WarmBootReload
         lbcs    ServiceBad
         lbsr    CacheInvalidate
@@ -472,6 +488,22 @@ LkfFail
 ********************************************************************
 * One-track physical-sector cache
 ********************************************************************
+* Write-through: no pending dirty sectors yet. Write-back will replace
+* this routine, preserving the carry/error contract.
+CacheFlushAll
+        andcc   #$FE
+        rts
+
+* Never invalidate data or hardware position state after a failed flush.
+CacheReset
+        lbsr    CacheFlushAll
+        bcs     CrDone
+        lbsr    CacheInvalidate
+        lbsr    FdcInvalidatePositions
+        andcc   #$FE
+CrDone
+        rts
+
 CacheInvalidate
         clr     CacheTagValid
         ldx     #CacheValidMap

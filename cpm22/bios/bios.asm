@@ -60,6 +60,9 @@ ALV7 EQU     ALV6+31
         JMP     WRITE
         JMP     LISTST
         JMP     SECTRAN
+        ; FM-11 extensions (BIOSBASE+33H / +36H); standard 17 unchanged.
+        JMP     CACHE_SYNC
+        JMP     CACHE_RESET
 
 ; ----------------------------------------------------------------------
 ; BOOT / WBOOT
@@ -376,7 +379,7 @@ READ    MVI     A,MBCMD_READ
         JMP     DISK_CALL
 
 WRITE   MOV     A,C
-        STA     MBOX_FLAGS  ; CP/M write type for future optimisation
+        STA     MBOX_FLAGS  ; CP/M write type: 0 normal, 1 directory, 2 unallocated
         MVI     A,MBCMD_WRITE
         JMP     DISK_CALL
 
@@ -388,6 +391,13 @@ SECTRAN  MOV     H,B
 ; ----------------------------------------------------------------------
 ; Common synchronous mailbox service call
 ; ----------------------------------------------------------------------
+
+; Public cache extensions: A=0/Z=1 success, A=1/Z=0 error.
+; BC, DE, HL and SP preserved. No disk parameter or DMA changes.
+CACHE_SYNC  MVI     A,MBCMD_CACHE_SYNC
+        JMP     MBOX_SIMPLE
+CACHE_RESET  MVI     A,MBCMD_CACHE_RESET
+        JMP     MBOX_SIMPLE
 
 DISK_CALL  STA     MBOX_CMD
         XRA     A

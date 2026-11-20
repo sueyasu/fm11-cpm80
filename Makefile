@@ -143,3 +143,7 @@ $(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88: $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/
 image8088-2hd: $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88
 $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88: $(I8086_BUILD)/ipl_2hd.bin $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
 	$(PYTHON) tools/mk2hd_d88.py --ipl $(I8086_BUILD)/ipl_2hd.bin --system $(I8086_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.raw --label "FM11 CPM80 8088"
+
+.PHONY: test-cache-api
+test-cache-api: bios bios8088
+	$(PYTHON) tests/check_cache_api.py

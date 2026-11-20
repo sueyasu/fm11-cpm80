@@ -57,13 +57,23 @@ server_dispatch:
 .not_write:
     cmp al,3
     jne .not_boot
-    call fdc_forget_all
-    mov byte [cache_valid],0
+    call cache_reset
+    jc failure
     mov byte [ansi_state],0
     mov cx,22
     call reload_system
     jmp finish
 .not_boot:
+    cmp al,MBCMD_CACHE_SYNC
+    jne .not_cache_sync
+    call cache_flush_all
+    jmp finish
+.not_cache_sync:
+    cmp al,MBCMD_CACHE_RESET
+    jne .not_cache_reset
+    call cache_reset
+    jmp finish
+.not_cache_reset:
     cmp al,0x10
     jne .not_lconst
     call local_const
@@ -239,6 +249,22 @@ decode_request:
     ret
 .bad:
     stc
+    ret
+
+; Write-through: all successful writes are already on disk.
+; Write-back will replace this routine without changing its CF contract.
+cache_flush_all:
+    clc
+    ret
+
+; Flush before invalidating data or hardware position state.
+cache_reset:
+    call cache_flush_all
+    jc .done
+    mov byte [cache_valid],0
+    call fdc_forget_all
+    clc
+.done:
     ret
 
 ; Single-cylinder write-through cache: 52 sectors at physical 06000h.
