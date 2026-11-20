@@ -1,13 +1,13 @@
-# FM-11 CP/M-80 whole-HDD boot (8088+Z80 and V20)
+# FM-11 CP/M-80 whole-HDD boot
 
 One physical MDC HDD maps to I:, with the same filesystem as the CP/M-86
 whole-HDD data area. All nine models in [hdd-data.md](hdd-data.md) are
-supported by design. HDD boot for 6809+Z80 is not implemented yet.
+supported by design for all three CPU backends.
 
 | Physical LBA (256 bytes) | Contents |
 |---|---|
 | 0–1 | Shared 512-byte HDD IPL |
-| 2–25 | 6 KiB native server, specific to 8088+Z80 or V20 |
+| 2–25 | 6 KiB native server, specific to CPU backend |
 | 26–51 | 0x1a00-byte CCP/BDOS/CBIOS, specific to backend |
 | 52 to end of cylinder 0 | Reserved (E5h) |
 | Cylinder 1 onward | CP/M filesystem, identical to data-only images |
@@ -79,3 +79,26 @@ CBIOS code are different. Do not mount the same image concurrently.
 Do not overwrite a data HDD with the image builder; FORMAT /S is
 planned separately. The same original ROM is used for FDD and HDD
 boot, according to the DIP switches.
+
+## 6809 + Z80
+
+The standard 6809 ROM loads LBA 0–1 at $0400 (same contract as
+FM-11 NitrOS-9 HDD IPL). The disk IPL uses 6844 DMA2 to load LBA 2–25
+into physical $10000, configures MMR13/14 and jumps to $D000 with A=2.
+The resident server uses native DMA2 and the existing two cache windows.
+HDD side-track is encoded as high byte in PhysSide, low byte in PhysTrack;
+the two-byte cache tag distinguishes all 8217 physical side-tracks.
+HDD read/write uses 24-bit LBA; cold/warm system reload uses the same
+LBA 26–51 / 26–47 as the 8088 variants.
+
+```sh
+make imagehdd HDD_MODEL=m2233b
+make test-hdd-6809
+```
+
+Output: build/images/fm11-cpm80-6809-hdd.img. Use the original
+boot6809.bin, [DIPSW] main_cpu=6809 and HDD=true, [optional_cpu]
+type=z80; retain normal display/ROM configuration. Then boot with
+fm11-sdl --config as usual. Initial prompt I:. Verify DIR, PIP,
+Ctrl-C, and persistence. Also run the M2243B last-block test
+described in hdd-data.md because this is a new native transport.

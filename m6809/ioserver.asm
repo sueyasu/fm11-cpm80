@@ -21,6 +21,7 @@ CPM_WORK_LEN    equ    $0278
 BOOTTYPE        equ    $FBF5
 BOOT_2D         equ    $00
 BOOT_2HD        equ    $01
+BOOT_HDD        equ    $02
 SYSTEM_TRACK    equ    1
 
 * Two 8 KiB side-track cache windows in physical pages $12-$15.
@@ -35,8 +36,8 @@ IOSERVER_STACK_TOP equ $F000
 IoServerStart
         orcc    #$50
         lds     #IOSERVER_STACK_TOP
-        anda    #$01
         sta     BOOTTYPE
+        clr     HddReady
         lsla
         lsla
         sta     BOOTDRV
@@ -111,6 +112,8 @@ ServiceLoop
         lbeq    ServiceCacheSync
         cmpb    #MBCMD_CACHE_RESET
         lbeq    ServiceCacheReset
+        cmpb    #MBCMD_HDD_GEOM
+        lbeq    ServiceHddGeometry
         cmpb    #MBCMD_LOCAL_CONST
         lbeq    ServiceLocalConst
         cmpb    #MBCMD_LOCAL_CONIN
@@ -179,6 +182,11 @@ SwLoad
 SwOK
         clr     MBOX_STATUS
         lbra    ServiceDone
+
+ServiceHddGeometry
+        lbsr    HddGeometry
+        lbcs    ServiceBad
+        lbra    ServiceCacheOK
 
 ServiceCacheSync
         lbsr    CacheFlushAll
@@ -493,7 +501,7 @@ LkfFail
 ValidateDiskRequest
         lda     MBOX_DRIVE
         cmpa    #8
-        bhs     VdrBad
+        bhi     VdrBad
         andcc   #$FE
         rts
 VdrBad
@@ -503,13 +511,22 @@ VdrBad
 ResolveLogicalDrive
         lda     MBOX_DRIVE
         cmpa    #8
-        bhs     RldBad
+        bhi     RldBad
+        beq     RldHdd
         anda    #$03
         sta     PhysDrive
         lda     MBOX_DRIVE
         anda    #$04
         lsra
         lsra
+        sta     PhysIs2HD
+        andcc   #$FE
+        rts
+RldHdd
+        lbsr    HddEnsure
+        bcs     RldBad
+        clr     PhysDrive
+        lda     #2
         sta     PhysIs2HD
         andcc   #$FE
         rts
@@ -528,6 +545,9 @@ VdmBad
         rts
 
 DecodeLogicalSector
+        lda     PhysIs2HD
+        cmpa    #2
+        lbeq    HddDecode
         lda     MBOX_TRACK_H
         bne     DlsBad
         lda     MBOX_TRACK_L
@@ -956,6 +976,7 @@ SfwFailAck
 StdFdcReadWBoot
         lbsr    StdFdcReadSector
         bcs     SrwFail
+SrwCopy
         ldd     WBootDest
         std     MBOX_DMA_H
         clr     PhysHalf
@@ -972,6 +993,9 @@ SrwFail
 
 BootReadWBoot
         lda     PhysIs2HD
+        cmpa    #2
+        lbeq    HddReadWBoot
+        tsta
         bne     Brw2HD
         lbra    MiniFdcReadWBoot
 Brw2HD
@@ -980,6 +1004,9 @@ Brw2HD
 AdvanceSystemSector
         inc     PhysSector
         lda     PhysIs2HD
+        cmpa    #2
+        lbeq    HddAdvanceBoot
+        tsta
         beq     Ass2D
         lda     PhysSector
         cmpa    #27
@@ -1001,6 +1028,10 @@ InitBootSystemRead
         lda     BOOTDRV
         sta     MBOX_DRIVE
         lbsr    ResolveLogicalDrive
+        bcs     InitBootFail
+        lda     PhysIs2HD
+        cmpa    #2
+        beq     InitBootHdd
         lda     #SYSTEM_TRACK
         sta     PhysTrack
         clr     PhysSide
@@ -1008,10 +1039,22 @@ InitBootSystemRead
         sta     PhysSector
         ldx     #CPM_SYSTEM_DEST
         stx     WBootDest
+        andcc   #$FE
+        rts
+InitBootHdd
+        clr     PhysTrack
+        clr     PhysSide
+        lda     #27             * LBA26, one-based physical sector
+        sta     PhysSector
+        ldx     #CPM_SYSTEM_DEST
+        stx     WBootDest
+        andcc   #$FE
+InitBootFail
         rts
 
 ColdBootLoadSystem
         lbsr    InitBootSystemRead
+        bcs     CblFail
         ldu     #CPM_SYSTEM_SECTORS
 CblSector
         lbsr    BootReadWBoot
@@ -1033,6 +1076,7 @@ CblFail
 
 WarmBootReload
         lbsr    InitBootSystemRead
+        bcs     WbrFail
         ldu     #CPM_WBOOT_SECTORS
 WbrSector
         lbsr    BootReadWBoot
@@ -1129,6 +1173,8 @@ CwhBad
         orcc    #$01
         rts
 
+        include "hdd.inc"
+
 TrampolineTemplate
         lda     #$01
         sta     >CPUCTL
@@ -1138,13 +1184,13 @@ TrampolineTemplateEnd
 
 MiniCylinder    rmb     4
 StdCylinder     rmb     4
-PhysTrack       rmb     1
-PhysSide        rmb     1
+PhysTrack       rmb     1       * HDD side-track low byte
+PhysSide        rmb     1       * HDD side-track high byte
 PhysSector      rmb     1
 PhysHalf        rmb     1
 PhysFdcBase     rmb     2
 PhysDrive       rmb     1
-PhysIs2HD       rmb     1
+PhysIs2HD       rmb     1       * 0=2D, 1=2HD, 2=HDD
 WBootDest       rmb     2
 SavedMmrC       rmb     1
 LocalKeyValid   rmb     1
@@ -1169,7 +1215,7 @@ WorkCol         rmb     1
 LineRow         rmb     1
 LineCol         rmb     1
 NativeAttr      rmb     1
-* Window tags: logical drive (0..7), physical cylinder and side.
+* Window tags: logical drive (0..8), FDD cylinder/side or HDD track low/high.
 CacheUsed       rmb     2
 CacheDrive      rmb     2
 CacheTrack      rmb     2
@@ -1180,6 +1226,12 @@ CacheIndex      rmb     1
 CacheValidMap   rmb     8       * two 32-bit maps
 CacheDirtyMap   rmb     8
 CacheFlushSlot  rmb     1
+HddReady        rmb     1
+HddHeads        rmb     1
+HddTotalTracks  rmb     2
+HddDsm          rmb     2
+HddLba          rmb     3
+HddResult       rmb     10
 PhysBuf         rmb     256
 * Emit a final byte so the binary-size check includes trailing workspace.
 IoServerEndMarker fcb   0

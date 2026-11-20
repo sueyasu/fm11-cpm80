@@ -1,4 +1,4 @@
-# MDC HDD data drive (8088+Z80 and V20)
+# MDC HDD data drive (6809+Z80, 8088+Z80 and V20)
 
 Boot from 2D or 2HD as usual. I: maps the entire single MDC HDD,
 with the same filesystem as fm11-cpm86: 256-byte physical sectors,
@@ -8,11 +8,12 @@ DSM=floor((cylinders-1)*heads/2)-1 and OFF=heads. The first cylinder is
 reserved. No partitions. All nine CP/M-86 models are supported by design.
 
 The common BIOS queries native mailbox command 06h; successful replies
-contain DSM in TRACK and OFF in SECTOR (big endian). The 6809 server
-rejects this command, so I: remains unavailable there. Native geometry
+contain DSM in TRACK and OFF in SECTOR (big endian). Both native servers support this command. Native geometry
 is cached until CACHE_RESET/WBOOT; the HDD must not be exchanged while
 mounted. I/O uses binary LBA and DMA channel 2, with the existing
-256-byte bounce buffer and both 8 KiB cache windows. Dirty write-back
+256-byte bounce buffer and both 8 KiB cache windows. The 6809 uses DMA2
+of the 6844 and stores HDD side-track high/low bytes in the existing
+side/cylinder cache tag fields. Dirty write-back
 and directory ordering remain unchanged.
 
 The original BDOS 16-bit relative record arithmetic wraps after 8 MiB.
@@ -58,7 +59,7 @@ prepopulate a disposable image so that a file uses a block >=512
 also test random-write function 40 and the largest model. The
 geometry test checks the arithmetic model, not the assembled BDOS
 execution. Assembler size checks remain in the build. HDD boot is described in [boot-hdd.md](boot-hdd.md).
-FORMAT and 6809 MDC transport remain outside the current implementation.
+FORMAT remains outside the current implementation.
 
 ## M2243B last-block regression
 

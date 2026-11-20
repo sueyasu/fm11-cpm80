@@ -25,6 +25,7 @@ CacheReset
         bcs     CrDone
         lbsr    CacheInvalidate
         lbsr    FdcInvalidatePositions
+        clr     HddReady
         andcc   #$FE
 CrDone
         rts
@@ -201,11 +202,17 @@ ReadPhysical
         bra     RpOK
 RpMiss
         lda     PhysIs2HD
+        cmpa    #2
+        beq     RpHdd
+        tsta
         bne     RpHD
         lbsr    MiniFdcReadSector
         bra     RpReadDone
 RpHD
         lbsr    StdFdcReadSector
+        bra     RpReadDone
+RpHdd
+        lbsr    HddReadSector
 RpReadDone
         bcs     RpDone
         lbsr    CacheStoreSector
@@ -238,6 +245,8 @@ CacheFlushWindow
         lbeq     CfwOK
         ldx     #CacheDrive
         lda     b,x
+        cmpa    #8
+        beq     CfwHddTag
         tfr     a,b
         anda    #3
         sta     PhysDrive
@@ -245,6 +254,12 @@ CacheFlushWindow
         lsrb
         lsrb
         stb     PhysIs2HD
+        bra     CfwTagReady
+CfwHddTag
+        clr     PhysDrive
+        lda     #2
+        sta     PhysIs2HD
+CfwTagReady
         ldb     CacheSlot
         ldx     #CacheTrack
         lda     b,x
@@ -263,11 +278,17 @@ CfwLoop
         sta     PhysSector
         lbsr    CacheLoadSector
         lda     PhysIs2HD
+        cmpa    #2
+        beq     CfwHddWrite
+        tsta
         bne     CfwHD
         lbsr    MiniFdcWriteSector
         bra     CfwWritten
 CfwHD
         lbsr    StdFdcWriteSector
+        bra     CfwWritten
+CfwHddWrite
+        lbsr    HddWriteSector
 CfwWritten
         bcs     CfwFail
         ldx     #CacheDirtyMap

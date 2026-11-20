@@ -47,7 +47,7 @@ $(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) $(BIOS_INIT_6809) Makefile | $
 
 ioserver: $(M6809_BUILD)/ioserver.bin
 
-$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc m6809/track_cache.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
+$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc m6809/track_cache.inc m6809/hdd.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 -I m6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "6809 I/O server disk slot (logical D000-E7FF, physical 10000-117FF)"
 
@@ -229,3 +229,14 @@ imagev20-hdd: hdd-ipl $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin
 	$(PYTHON) tools/mk_hdd_boot.py --model $(HDD_MODEL) --ipl $(HDD_IPL) --server $(V20_BUILD)/ioserver.bin --system $(V20_BUILD)/system62.bin --commands $(COMMANDS_DIR) $(HDD_V20_IMAGE)
 test-hdd-boot: hdd-ipl $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin
 	PYTHONPATH=tools $(PYTHON) tests/check_hdd_boot.py $(I8086_BUILD) $(V20_BUILD)
+
+# Standard 6809 ROM HDD boot; image layout matches native 8088 targets.
+HDD_6809_IMAGE ?= $(IMAGE_BUILD)/fm11-cpm80-6809-hdd.img
+.PHONY: imagehdd test-hdd-6809
+$(M6809_BUILD)/ipl_hdd.bin: m6809/ipl_hdd.asm include/6809/fm11.inc Makefile | $(M6809_BUILD)
+	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ipl_hdd.lst --symbols -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "6809 HDD IPL"
+imagehdd: $(M6809_BUILD)/ipl_hdd.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin
+	$(PYTHON) tools/mk_hdd_boot.py --cpu 6809 --model $(HDD_MODEL) --ipl $(M6809_BUILD)/ipl_hdd.bin --server $(M6809_BUILD)/ioserver.bin --system $(CPM_BUILD)/system62.bin --commands $(COMMANDS_DIR) $(HDD_6809_IMAGE)
+test-hdd-6809: $(M6809_BUILD)/ipl_hdd.bin $(CPM_BUILD)/system62.bin $(M6809_BUILD)/ioserver.bin
+	PYTHONPATH=tools $(PYTHON) tests/check_hdd_6809.py $(M6809_BUILD) $(CPM_BUILD)

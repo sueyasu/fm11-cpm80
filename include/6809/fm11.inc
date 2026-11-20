@@ -25,6 +25,7 @@ MBCMD_WRITE     equ     $02
 MBCMD_WBOOT     equ     $03
 MBCMD_CACHE_SYNC equ    $04
 MBCMD_CACHE_RESET equ   $05
+MBCMD_HDD_GEOM  equ     $06
 MBCMD_LOCAL_CONST equ   $10
 MBCMD_LOCAL_CONIN equ   $11
 MBCMD_LOCAL_CONOUT equ  $12
@@ -134,3 +135,14 @@ DMA_ERROR       equ     $40
 DMA_COMPLETE    equ     $80
 DMA_READ_MODE   equ     DMA_DIR_READ+DMA_ENABLE
 DMA_WRITE_MODE  equ     DMA_DIR_WRITE+DMA_ENABLE
+
+* MDC and 6844 channel 2.
+MDC_CMD         equ     $FDC0
+MDC_DATA        equ     $FDC1
+MDC_SELECT      equ     $FDC2
+DMA2_ADDR_H     equ     $FD48
+DMA2_ADDR_L     equ     $FD49
+DMA2_COUNT_H    equ     $FD4A
+DMA2_COUNT_L    equ     $FD4B
+DMA2_MODE       equ     $FD52
+DMA2_BANK       equ     $FD96

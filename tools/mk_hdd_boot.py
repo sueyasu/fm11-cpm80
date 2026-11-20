@@ -20,13 +20,22 @@ RECORDS_PER_ENTRY = ALLOCATIONS_PER_ENTRY * BLOCK // RECORD
 ERASED = 0xE5
 
 
-def build_image(model: str, ipl: bytes, server: bytes, system: bytes, files=()) -> bytes:
+def build_image(model: str, ipl: bytes, server: bytes, system: bytes, files=(), cpu='8088') -> bytes:
     cylinders, heads = MODELS[model]
     size = cylinders * heads * SPT * SECTOR
     reserved = heads * SPT * SECTOR
+    if cpu == '6809':
+        if not 0 < len(ipl) <= 512 or not 0 < len(server) <= SERVER_SIZE:
+            raise ValueError("6809 IPL or native server exceeds slot")
+        if ipl[:2] != b'\x1a\x50' or server[:2] != b'\x1a\x50':
+            raise ValueError("invalid 6809 IPL or native server signature")
+        ipl = ipl.ljust(512, b'\x00')
+        server = server.ljust(SERVER_SIZE, b'\x00')
+    elif cpu != '8088':
+        raise ValueError("unknown CPU backend")
     if len(ipl) != 512 or len(server) != SERVER_SIZE or len(system) != SYSTEM_SIZE:
         raise ValueError("IPL must be 512, server 0x1800, system 0x1a00 bytes")
-    if ipl[0] != 0xFA or server[0] != 0xFA or system[0] != 0xc3 or system[0x1600] != 0xc3:
+    if (cpu == '8088' and (ipl[0] != 0xFA or server[0] != 0xFA)) or system[0] != 0xc3 or system[0x1600] != 0xc3:
         raise ValueError("invalid HDD IPL, native server or CP/M signature")
     if reserved < 512 + RESIDENT_SIZE:
         raise ValueError("HDD reserved cylinder too small")
@@ -89,6 +98,7 @@ def build_image(model: str, ipl: bytes, server: bytes, system: bytes, files=()) 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--cpu', choices=('6809','8088'), default='8088')
     parser.add_argument("--model", choices=MODELS, default="m2233b")
     parser.add_argument("--ipl", type=Path, required=True)
     parser.add_argument("--server", type=Path, required=True)
@@ -98,7 +108,7 @@ def main():
     args = parser.parse_args()
     files = command_files(args.commands)
     data = build_image(args.model, args.ipl.read_bytes(), args.server.read_bytes(),
-                       args.system.read_bytes(), files)
+                       args.system.read_bytes(), files, cpu=args.cpu)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('xb') as f:
         f.write(data)
