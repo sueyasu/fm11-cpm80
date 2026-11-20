@@ -79,6 +79,8 @@ Attach this image as the HDD, boot from the usual FDD, and run:
 A>I:
 I>HDDTEST
 M2243B last-block test
+PASS: DSM=1006h
+PASS: TAIL.DAT opened
 PASS: all 128 records read
 PASS: random write/readback; verify image on host
 ```
@@ -121,3 +123,7 @@ also misreport 128-byte record capacity above 8 MiB. This is a
 utility limitation, not evidence of a BDOS I/O failure. Other
 STAT versions may differ. The bundled test checks actual data,
 not STAT output.
+
+HDDTEST initializes its FCB explicitly and reports the failing stage,
+including hexadecimal DSM, BDOS status, or record/byte offset and
+expected/actual data. Recreate the fixture after rebuilding HDDTEST.
