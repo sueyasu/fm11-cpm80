@@ -11,8 +11,6 @@ CPM_BUILD   := $(BUILD)/cpm22
 IMAGE_BUILD := $(BUILD)/images
 
 CPM22_CORE         := $(CPM_BUILD)/ccpbdos62.bin
-CPM22_FUJITSU_CORE ?= external/cpm22/ccpbdos56.bin
-FUJITSU_CPM_IMAGE  ?= external/reference/cpm2d00.img
 COMMANDS_DIR       ?= external/commands
 
 D88_IMAGE_2D  := $(IMAGE_BUILD)/fm11-cpm80-2d.d88
@@ -21,7 +19,7 @@ D88_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.d88
 RAW_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.raw
 COMMAND_FILES := $(wildcard $(COMMANDS_DIR)/*.COM) $(wildcard $(COMMANDS_DIR)/*.com)
 
-.PHONY: all check-tools core bios ioserver ipl system image image2d image2hd extract-core clean
+.PHONY: all check-tools core bios ioserver ipl system image image2d image2hd clean
 
 all: check-tools image
 
@@ -61,9 +59,6 @@ $(M6809_BUILD)/ipl_2hd.bin: m6809/ipl_2hd.asm include/6809/fm11.inc | $(M6809_BU
 	$(LWASM) --6809 --format=raw -I include/6809 --list=$(M6809_BUILD)/ipl_2hd.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "FM-11 2HD IPL (0400-05FF)"
 
-extract-core: $(FUJITSU_CPM_IMAGE) tools/extract_fujitsu_core.py
-	$(PYTHON) tools/extract_fujitsu_core.py $(FUJITSU_CPM_IMAGE) $(CPM22_FUJITSU_CORE)
-
 system: $(CPM_BUILD)/system62.bin
 
 $(CPM_BUILD)/system62.bin: $(CPM22_CORE) $(Z80_BUILD)/bios.bin tools/mksystem.py | $(CPM_BUILD)
@@ -98,11 +93,6 @@ core: $(CPM22_CORE)
 $(CPM22_CORE): cpm22/cpm22_fm11.asm tools/pad_core.py Makefile | $(CPM_BUILD)
 	$(ASM8080) $< -o$(CPM_BUILD)/ccpbdos62-unpadded
 	$(PYTHON) tools/pad_core.py $(CPM_BUILD)/ccpbdos62-unpadded.bin $@
-
-$(FUJITSU_CPM_IMAGE):
-	@echo "error: missing $@" >&2
-	@echo "Place the locally owned Fujitsu FM-11 CP/M 2D image there." >&2
-	@exit 1
 
 clean:
 	rm -rf $(BUILD)

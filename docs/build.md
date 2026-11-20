@@ -22,16 +22,6 @@ The generated `build/cpm22/ccpbdos62.bin` must be exactly 5632 bytes
 (DC00h-F1FFh). The BIOS is assembled at F200h. BDOS function 13 reads the
 boot-drive byte at FBF4h and ignores the caller's DE parameter.
 
-The locally owned Fujitsu reference image can still be used to extract its
-original 56K CCP+BDOS for comparison. `make extract-core` writes that separate
-reference file to:
-
-```text
-external/cpm22/ccpbdos56.bin
-```
-
-It does not overwrite the assembled 62K core.
-
 ## External CP/M commands
 
 Place optional `.COM` files in:
@@ -83,7 +73,6 @@ make ipl
 make image
 make image2d
 make image2hd
-make extract-core
 make clean
 ```
 
