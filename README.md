@@ -15,6 +15,9 @@ Run `make`. The CCP/BDOS source is adapted from PC-9801 CP/M-80 v1.1;
 no external core binary is required. See [docs/build.md](docs/build.md).
 Optional COM files in external/commands/ are included in both images.
 
+Experimental 8088+Z80 target: install NASM and run `make image8088`.
+See [docs/8088-z80.md](docs/8088-z80.md). The default build is unchanged.
+
 ## Boot drive and SUBMIT
 
 BDOS function 13 resets the disk system on the actual boot drive; CCP reads

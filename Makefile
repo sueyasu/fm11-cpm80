@@ -106,3 +106,30 @@ $(FUJITSU_CPM_IMAGE):
 
 clean:
 	rm -rf $(BUILD)
+
+# Experimental 8088+Z80 builds; default 6809 builds are unchanged.
+NASM ?= nasm
+I8086_BUILD := $(BUILD)/i8086
+.PHONY: image8088 image8088-2d image8088-2hd ioserver8088 ipl8088
+image8088: image8088-2d image8088-2hd
+ioserver8088: $(I8086_BUILD)/ioserver.bin
+ipl8088: $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/ipl_2hd.bin
+
+$(I8086_BUILD):
+	mkdir -p $@
+
+$(I8086_BUILD)/ioserver.bin: i8086/ioserver.asm $(wildcard i8086/*.inc) | $(I8086_BUILD)
+	$(NASM) -f bin -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "8088 I/O server"
+
+$(I8086_BUILD)/ipl_%.bin: i8086/ipl_%.asm | $(I8086_BUILD)
+	$(NASM) -f bin -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "8088 IPL"
+
+image8088-2d: $(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88
+$(IMAGE_BUILD)/fm11-cpm80-8088-2d.d88: $(I8086_BUILD)/ipl_2d.bin $(CPM_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2d_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2d_d88.py --ipl $(I8086_BUILD)/ipl_2d.bin --system $(CPM_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2d.raw --label "FM11 CPM80 8088"
+
+image8088-2hd: $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88
+$(IMAGE_BUILD)/fm11-cpm80-8088-2hd.d88: $(I8086_BUILD)/ipl_2hd.bin $(CPM_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin tools/mk2hd_d88.py $(COMMAND_FILES) | $(IMAGE_BUILD)
+	$(PYTHON) tools/mk2hd_d88.py --ipl $(I8086_BUILD)/ipl_2hd.bin --system $(CPM_BUILD)/system62.bin --ioserver $(I8086_BUILD)/ioserver.bin --commands $(COMMANDS_DIR) --output $@ --raw-output $(IMAGE_BUILD)/fm11-cpm80-8088-2hd.raw --label "FM11 CPM80 8088"
