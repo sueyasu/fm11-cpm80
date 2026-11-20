@@ -38,7 +38,8 @@ They do not apply directly to D88 files.
 I: maps to one whole MDC HDD, with the same filesystem layout as CP/M-86.
 See [docs/hdd-data.md](docs/hdd-data.md) for data disks and regression tests.
 `make image8088-hdd` or `make imagev20-hdd` creates a bootable HDD;
-see [docs/boot-hdd.md](docs/boot-hdd.md). 6809 HDD transport is not yet available.
+see [docs/boot-hdd.md](docs/boot-hdd.md). Uses the original FM-11 8088 ROM,
+not a replacement boot ROM. 6809 HDD transport is not yet available.
 
 ## Boot drive and SUBMIT
 

@@ -1,5 +1,7 @@
 ; FM-11 CP/M-80 HDD IPL, adapted from fm11-cpm86 f72336a (MIT).
-; ROM loads LBA 0..1 at 07C0:0000. Relocate and load the native server.
+; Standard FM-11 8088 ROM loads C0/H0/records 0 and 1 at 07C0:0000.
+; It jumps to 07C0:0000 (ROM v3.3, offsets 02CFh..0397h).
+; Do not depend on register state left by the ROM.
 cpu 8086
 bits 16
 org 0
@@ -12,6 +14,23 @@ start:
     mov sp,0x9000
     push cs
     pop ds
+    ; Same conditional USART setup as the FDD IPL. Do not drop an
+    ; existing serial connection by resetting an enabled transmitter.
+    mov dx,0xfd07
+    in al,dx
+    test al,1
+    jnz .serial_ready
+    xor al,al
+    out dx,al
+    out dx,al
+    out dx,al
+    mov al,0x40
+    out dx,al
+    mov al,0x4e
+    out dx,al
+    mov al,0x37
+    out dx,al
+.serial_ready:
     mov ax,0x0100
     mov es,ax
     xor si,si

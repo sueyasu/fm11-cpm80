@@ -1,6 +1,6 @@
 ; Adapted from fm11-cpm86 src/hdd_boot_io.inc at f72336a (MIT).
 ; FM-11 8088 MDC HDD read-only first-stage helpers.
-; Both the HDD reset ROM and disk IPL use binary LBA and DMA channel 2.
+; Disk IPL switches the MDC to binary LBA after the standard ROM handoff.
 ; Input hdd_read_sector: SI=physical sector LBA (0..63), BX=physical RAM
 ; destination (below 64 KiB). Preserves general registers, returns CF.
 hdd_set_binary:

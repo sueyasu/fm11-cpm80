@@ -13,7 +13,7 @@ supported by design. HDD boot for 6809+Z80 is not implemented yet.
 | Cylinder 1 onward | CP/M filesystem, identical to data-only images |
 
 The smallest supported cylinder has 64 sectors, so all system sectors
-fit in cylinder 0. The reset ROM (4 KiB, FF000h) reads LBA 0–1 into
+fit in cylinder 0. The original FM-11 8088 boot ROM reads LBA 0–1 into
 07C0:0000, then the IPL relocates to 0100:0000 and loads the native
 server into 0400:0000, passing AL=8. The server SENSEs the HDD and
 loads 26 sectors starting at LBA 26 into 1000:DC00. WBOOT flushes
@@ -22,9 +22,15 @@ CCP+BDOS); CBIOS and ALV are not overwritten. The existing Z80 FD05
 or V20 BRKEM/CALLN backend is unchanged. BOOTDRV=8, BOOTTYPE=2.
 FDD boot remains supported.
 
-The supplied HDD reset ROM and IPL read via binary LBA / DMA2,
-adapted from fm11-cpm86. They do not establish compatibility with
-the original Fujitsu HDD boot ROM. Emulator testing is required.
+No replacement reset ROM is required. The disassembled FM-11 8088 ROM
+v3.3 (SM07418-M050/02, 01/07/84) has an HDD boot path at FF00:02CF:
+it reads records 0 and 1 of cylinder 0/head 0 (256 bytes each) via
+the ROM disk-read entry FF00:001B and jumps to 07C0:0000 at FF00:0393.
+The IPL initializes its own stack and segments, conditionally initializes
+USART0 as the FDD IPL does, and explicitly selects binary LBA / DMA2.
+The original ROM performs device selection via FD23 DIP switches.
+This handoff has been checked statically; emulator boot testing remains
+necessary. No original ROM bytes are included in this repository.
 
 ## Build
 
@@ -36,7 +42,6 @@ make test-hdd-boot
 ```
 
 Outputs:
-- build/i8086/hdd_bootrom.bin (shared)
 - build/i8086/ipl_hdd.bin (shared)
 - build/images/fm11-cpm80-v20-hdd.img or fm11-cpm80-8088-hdd.img
 
@@ -57,11 +62,11 @@ image = /absolute/path/to/fm11-cpm80-v20-hdd.img
 ```
 
 ```sh
-fm11-sdl --config /path/to/fm11emu.conf \
-  --8088-rom /path/to/fm11-cpm80/build/i8086/hdd_bootrom.bin
+fm11-sdl --config /path/to/fm11emu.conf
 ```
 
-The initial prompt must be I>. Boot first without mounted floppies
+Keep the original boot8088.bin in [main_8088] rom; do not override it
+with a custom ROM. The initial prompt must be I>. Boot first without mounted floppies
 to demonstrate that both cold boot and WBOOT (Ctrl-C) work from HDD.
 Run DIR and a supplied COM program such as STAT, copy a file on I:,
 then Ctrl-C and confirm it is retained. Test FDD access and WBOOT
@@ -72,5 +77,5 @@ SUBMIT uses the actual boot drive I: as before.
 Use separate images for the two CPU backends; their resident and
 CBIOS code are different. Do not mount the same image concurrently.
 Do not overwrite a data HDD with the image builder; FORMAT /S is
-planned separately. The dedicated boot ROM does not select FDD
-as a fallback; use the normal FDD ROM for FDD boot.
+planned separately. The same original ROM is used for FDD and HDD
+boot, according to the DIP switches.

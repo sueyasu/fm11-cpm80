@@ -7,9 +7,8 @@ from mk_hdd_boot import build_image, MODELS
 
 native, v20 = map(Path, sys.argv[1:])
 ipl = (native / "ipl_hdd.bin").read_bytes()
-rom = (native / "hdd_bootrom.bin").read_bytes()
+# Standard ROM loads exactly two 256-byte sectors and enters 07C0:0000.
 assert len(ipl) == 512 and ipl[0] == 0xfa
-assert len(rom) == 4096 and rom[0xff0:0xff5] == bytes.fromhex("ea 00 00 00 ff")
 assert bytes.fromhex("b0 08 ea 00 00 00 04") in ipl
 with tempfile.TemporaryDirectory() as tmp:
     f = Path(tmp) / "TEST.COM"
