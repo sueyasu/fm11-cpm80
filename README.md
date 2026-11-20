@@ -5,7 +5,7 @@ CP/M 2.2 for the Fujitsu FM-11 with the Z80 card.
 - 62K system: CCP at DC00h, BDOS entry at E406h, BIOS at F200h.
 - Fixed drive letters: A:-D: = 2D units 0-3; E:-H: = 2HD units 0-3, as in FM-11 CP/M-86.
 - 2D boots to A:, 2HD boots to E:. Warm boot preserves the current user and drive when available.
-- Resident 6809 I/O service, DMA sector reads/writes, write-through cache and physical RESTORE/SEEK.
+- Resident 6809 I/O service, DMA sector reads/writes, two-window write-back cache and physical RESTORE/SEEK.
 - Local console and serial console via the native mailbox service; bootable 2D and 2HD D88 and RAW images.
 
 ## Build

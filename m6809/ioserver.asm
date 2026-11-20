@@ -23,12 +23,10 @@ BOOT_2D         equ    $00
 BOOT_2HD        equ    $01
 SYSTEM_TRACK    equ    1
 
-* One CP/M track is one complete cylinder: 32 physical 256-byte sectors for
-* 2D, or 52 for 2HD.  Reserve four physical 4 KiB pages ($12000-$15FFF),
-* immediately above the two I/O-server pages, and map them temporarily through
-* logical page C.  Sectors are filled lazily and writes remain write-through.
+* Two 8 KiB side-track cache windows in physical pages $12-$15.
+* One window holds up to 32 physical 256-byte sectors.  Lazy fill/write-back.
 CACHE_PAGE_BASE equ    $12
-CACHE_MAX_SECTORS equ  52
+CACHE_MAX_SECTORS equ  32
 * Private E800-EFFF maps to physical 11800-11FFF; never use CP/M TPA.
 IOSERVER_STACK_TOP equ $F000
 
@@ -142,6 +140,8 @@ ServiceRead
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
+        lbsr    ValidateDmaRange
+        lbcs    ServiceBad
         lbsr    ReadPhysical
         lbcs    ServiceBad
         lbsr    CopyReadHalfToDma
@@ -157,25 +157,28 @@ ServiceWrite
         lbcs    ServiceBad
         lbsr    DecodeLogicalSector
         lbcs    ServiceBad
+        lbsr    ValidateDmaRange
+        lbcs    ServiceBad
+        lda     MBOX_FLAGS
+        cmpa    #1
+        bne     SwLoad
+        lbsr    CacheFlushAll
+        lbcs    ServiceBad
+SwLoad
         lbsr    ReadPhysical
         lbcs    ServiceBad
         lbsr    CopyDmaToWriteHalf
         lbcs    ServiceBad
-        lda     PhysIs2HD
-        lbne     ServiceWrite2HD
-        lbsr    MiniFdcWriteSector
-        lbra     ServiceWriteCommit
-ServiceWrite2HD
-        lbsr    StdFdcWriteSector
-ServiceWriteCommit
-        lbcs     ServiceWriteFail
         lbsr    CacheStoreSector
-        lda     #MBSTAT_OK
-        sta     MBOX_STATUS
-        lbra     ServiceDone
-ServiceWriteFail
-        lbsr    CacheInvalidate
-        lbra    ServiceBad
+        lbsr    CacheMarkDirty
+        lda     MBOX_FLAGS
+        cmpa    #1
+        bne     SwOK
+        lbsr    CacheFlushAll
+        lbcs    ServiceBad
+SwOK
+        clr     MBOX_STATUS
+        lbra    ServiceDone
 
 ServiceCacheSync
         lbsr    CacheFlushAll
@@ -485,161 +488,7 @@ LkfFail
         orcc    #$01
         puls    b,x,pc
 
-********************************************************************
-* One-track physical-sector cache
-********************************************************************
-* Write-through: no pending dirty sectors yet. Write-back will replace
-* this routine, preserving the carry/error contract.
-CacheFlushAll
-        andcc   #$FE
-        rts
-
-* Never invalidate data or hardware position state after a failed flush.
-CacheReset
-        lbsr    CacheFlushAll
-        bcs     CrDone
-        lbsr    CacheInvalidate
-        lbsr    FdcInvalidatePositions
-        andcc   #$FE
-CrDone
-        rts
-
-CacheInvalidate
-        clr     CacheTagValid
-        ldx     #CacheValidMap
-        ldb     #CACHE_MAX_SECTORS
-        clra
-CiLoop
-        sta     ,x+
-        decb
-        bne     CiLoop
-        rts
-
-CachePrepareTrack
-        tst     CacheTagValid
-        beq     CptReset
-        lda     CacheDrive
-        cmpa    PhysDrive
-        bne     CptReset
-        lda     CacheTrack
-        cmpa    PhysTrack
-        bne     CptReset
-        lda     CacheIs2HD
-        cmpa    PhysIs2HD
-        bne     CptReset
-        rts
-CptReset
-        lbsr    CacheInvalidate
-        lda     PhysDrive
-        sta     CacheDrive
-        lda     PhysTrack
-        sta     CacheTrack
-        lda     PhysIs2HD
-        sta     CacheIs2HD
-        lda     #1
-        sta     CacheTagValid
-        rts
-
-CacheSectorIndex
-        ldb     PhysSector
-        decb
-        tst     PhysSide
-        beq     CsiDone
-        lda     PhysIs2HD
-        bne     Csi2HD
-        addb    #16
-        bra     CsiDone
-Csi2HD
-        addb    #26
-CsiDone
-        rts
-
-CacheMapSector
-        stb     CacheIndex
-        lda     MMR_PAGE_C
-        sta     SavedMmrC
-        lda     CacheIndex
-        lsra
-        lsra
-        lsra
-        lsra
-        adda    #CACHE_PAGE_BASE
-        sta     MMR_PAGE_C
-        lda     CacheIndex
-        anda    #$0F
-        adda    #$C0
-        clrb
-        tfr     d,y
-        rts
-
-CacheLoadSector
-        lbsr    CachePrepareTrack
-        lbsr    CacheSectorIndex
-        stb     CacheIndex
-        ldx     #CacheValidMap
-        abx
-        tst     ,x
-        beq     ClsMiss
-        ldb     CacheIndex
-        lbsr    CacheMapSector
-        ldx     #PhysBuf
-        clrb
-ClsCopy
-        lda     ,y+
-        sta     ,x+
-        decb
-        bne     ClsCopy
-        lbsr    RestoreZ80Window
-        andcc   #$FE
-        rts
-ClsMiss
-        orcc    #$01
-        rts
-
-CacheStoreSector
-        lbsr    CachePrepareTrack
-        lbsr    CacheSectorIndex
-        stb     CacheIndex
-        lbsr    CacheMapSector
-        ldx     #PhysBuf
-        clrb
-CssCopy
-        lda     ,x+
-        sta     ,y+
-        decb
-        bne     CssCopy
-        lbsr    RestoreZ80Window
-        ldb     CacheIndex
-        ldx     #CacheValidMap
-        abx
-        lda     #1
-        sta     ,x
-        andcc   #$FE
-        rts
-
-ReadPhysicalCached
-        lbsr    CacheLoadSector
-        bcc     RpcDone
-        lda     PhysIs2HD
-        bne     Rpc2HD
-        lbsr    MiniFdcReadSector
-        bra     RpcReadDone
-Rpc2HD
-        lbsr    StdFdcReadSector
-RpcReadDone
-        bcs     RpcFail
-        lbsr    CacheStoreSector
-RpcDone
-        andcc   #$FE
-        rts
-RpcFail
-        lbsr    CacheInvalidate
-        orcc    #$01
-        rts
-
-
-ReadPhysical
-        lbra    ReadPhysicalCached
+        include "track_cache.inc"
 
 ValidateDiskRequest
         lda     MBOX_DRIVE
@@ -1320,12 +1169,17 @@ WorkCol         rmb     1
 LineRow         rmb     1
 LineCol         rmb     1
 NativeAttr      rmb     1
-CacheTagValid   rmb     1
-CacheDrive      rmb     1
-CacheTrack      rmb     1
-CacheIs2HD      rmb     1
+* Window tags: logical drive (0..7), physical cylinder and side.
+CacheUsed       rmb     2
+CacheDrive      rmb     2
+CacheTrack      rmb     2
+CacheSide       rmb     2
+CacheNext       rmb     1
+CacheSlot       rmb     1
 CacheIndex      rmb     1
-CacheValidMap   rmb     CACHE_MAX_SECTORS
+CacheValidMap   rmb     8       * two 32-bit maps
+CacheDirtyMap   rmb     8
+CacheFlushSlot  rmb     1
 PhysBuf         rmb     256
 * Emit a final byte so the binary-size check includes trailing workspace.
 IoServerEndMarker fcb   0

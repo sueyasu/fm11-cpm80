@@ -47,7 +47,7 @@ $(Z80_BUILD)/bios.bin: $(BIOS_COMMON) $(BIOS_Z80) $(BIOS_INIT_6809) Makefile | $
 
 ioserver: $(M6809_BUILD)/ioserver.bin
 
-$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
+$(M6809_BUILD)/ioserver.bin: m6809/ioserver.asm m6809/ansi_console.inc m6809/track_cache.inc include/6809/fm11.inc Makefile | $(M6809_BUILD)
 	$(LWASM) --6809 --format=raw -I include/6809 -I m6809 --list=$(M6809_BUILD)/ioserver.lst --symbols -o $@ $<
 	$(PYTHON) tools/check_binary.py $@ --max-size 0x1800 --name "6809 I/O server disk slot (logical D000-E7FF, physical 10000-117FF)"
 

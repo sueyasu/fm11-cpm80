@@ -103,9 +103,8 @@ CBIOS-selected drive, track, sector or DMA address. Native services clear
 CMD and return STATUS as for existing commands. The standard jump table
 indices, ten-byte mailbox layout and CP/M geometry remain unchanged.
 
-The 8086 native server uses two write-back windows; the 6809 server still
-uses write-through for now. CACHE_SYNC on 8086 writes all dirty sectors;
-on 6809 it succeeds without physical writes. CACHE_RESET additionally
+Both native servers use two 8 KiB write-back side-track windows.
+CACHE_SYNC writes all dirty sectors. CACHE_RESET additionally
 invalidates cache and remembered FDC head positions after a successful
 flush. Failed write-back retains unwritten dirty data and prevents
 cache reassignment or reset; the FDC transport may mark a failed drive's
@@ -121,8 +120,8 @@ These are FM-11-specific extensions, not standard CP/M 2.2 BIOS calls.
 
 WRITE retains the CP/M write type in FLAGS: 0 normal, 1 directory, 2 first
 record of an unallocated block. No new fields are needed for write-back.
-On 8086, types 0 and 2 are deferred; type 1 flushes all windows before
-and after the update. On 6809 all types still use write-through.
+On both servers, types 0 and 2 are deferred; type 1 flushes all windows
+before and after the update.
 
 ## Division of responsibility
 

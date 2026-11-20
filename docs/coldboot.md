@@ -71,7 +71,8 @@ combined system payload is exactly `$1A00` bytes.
 The I/O server is linked at logical D000. The IPL maps MMR13=10h and
 MMR14=11h. D000-E7FF is the resident image and workspace; E800-EFFF
 (physical 11800-11FFF) is the dedicated stack, starting at F000.
-The always-enabled write-through cache occupies physical 12000-15FFF.
+Two 8 KiB write-back cache windows occupy physical 12000-13FFF and
+14000-15FFF. Each holds one side-track, with 32-bit valid and dirty maps.
 
 Logical page C (C000-CFFF) is the temporary access window onto Z80 RAM
 or cache RAM. MMR12 is saved and restored around copies; 128-byte records
@@ -99,7 +100,8 @@ Cold boot and warm boot use the same cylinder-1 system image; there is no
 second CP/M system copy.
 
 On WBOOT, the Z80 BIOS posts `MBCMD_WBOOT` and hands control to the private
-6809 I/O server. The server re-establishes cylinder 1 and reloads only the first
+6809 I/O server. The server flushes both windows before invalidating cache
+and saved FDC positions, then re-establishes cylinder 1 and reloads only the first
 22 physical sectors, exactly CCP+BDOS (`$1600` bytes), from T1/H0/S1 onward to
 Z80 physical `$DC00-$F1FF`.
 

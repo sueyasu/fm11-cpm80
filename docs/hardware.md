@@ -28,7 +28,7 @@ The IPL reserves logical D000-EFFF in MMR task 0:
 6809 logical        Physical RAM       Use
 D000-E7FF     ->    10000-117FF        I/O server, code and data
 E800-EFFF     ->    11800-11FFF        private stack (initial S=F000)
-                    12000-15FFF        floppy cache when enabled
+                    12000-15FFF        two 8 KiB write-back cache windows
 ```
 
 Logical page C (C000-CFFF) is the temporary 6809 window onto Z80
