@@ -1,19 +1,20 @@
-; FM-11 8088+Z80 native mailbox server. 8086 instruction set only.
-; CS=0400h, AL=boot drive (0 or 4). DS=CS, ES=1000h for shared CP/M RAM.
+; FM-11 common native mailbox server. 8086 instruction set only.
+; Target backend supplies the entry point and CP/M execution mechanism.
 cpu 8086
 bits 16
 org 0
 %include "i8086/memory.inc"
 %include "i8086/mailbox.inc"
 
-start:
-    cli
-    mov dx,cs
-    mov ss,dx
-    mov sp,NATIVE_STACK_TOP
-    mov ds,dx
-    mov dx,CPM_SEG
-    mov es,dx
+%include "i8086/cpu_z80.inc"
+
+; Common cold initialization.
+; IN: AL=boot drive (0 or 4), DS=CS=native segment, ES=CPM_SEG,
+;     private native stack, maskable interrupts disabled.
+; OUT: CF=0 system loaded and workspace initialized, CF=1 disk failure.
+; Preserves segment registers and stack balance; general registers scratch.
+; No CP/M entry instructions or CPU switching here.
+server_cold_init:
     cld
     mov [boot_drive],al
     mov [es:BOOTDRV],al
@@ -23,32 +24,25 @@ start:
     call fdc_forget_all
     mov cx,26
     call reload_system
-    jnc .loaded
-    mov al,'E'
-    call diagnostic
-.stop:
-    hlt
-    jmp .stop
-.loaded:
+    jc .done
     xor ax,ax
     mov di,0xf970
     mov cx,0x278
     rep stosb
-    mov byte [es:0],0xc3
-    mov word [es:1],0xf200
-    mov word [es:3],0
     mov byte [es:MBOX_CMD],0
     mov byte [es:MBOX_STATUS],0
-    mov al,'Z'
-    call diagnostic
+    clc
+.done:
+    ret
 
-; The 8088 remains stopped at the OUT until the Z80 posts its next request.
-; Unlike 6809 the native server can execute directly in private bank-zero RAM.
-handoff:
-    mov dx,0xfd05
-    mov al,1
-    out dx,al
-    nop
+; Execute exactly one posted mailbox request, then return to the backend.
+; IN: DS=CS=native segment, ES=CPM_SEG, private native stack,
+;     maskable interrupts disabled; complete mailbox request posted.
+; OUT: STATUS=0/1, CMD=0, DATA as applicable, CF=0/1 matching STATUS.
+; DS/ES/SS/SP restored, DF=0; general registers and other flags scratch.
+; May block for input/output as specified by the existing mailbox ABI.
+; No CPU hand-off here. Backend owns any interrupted/emulated CPU context.
+server_dispatch:
     cld
     mov al,[es:MBOX_CMD]
     cmp al,1
@@ -149,14 +143,14 @@ finish:
     jnc finish_ok
 failure:
     mov byte [es:MBOX_STATUS],1
-    jmp .done_error
-.done_error:
     mov byte [es:MBOX_CMD],0
-    jmp handoff
+    stc
+    ret
 finish_ok:
     mov byte [es:MBOX_STATUS],0
     mov byte [es:MBOX_CMD],0
-    jmp handoff
+    clc
+    ret
 
 ; Read CYL 1, sequential sectors, split at side boundary on 2D.
 ; CX = 26 cold / 22 warm. Copy 256 bytes to shared CP/M bank 1 per transfer.

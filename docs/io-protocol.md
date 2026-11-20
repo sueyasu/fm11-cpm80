@@ -17,6 +17,12 @@ This is synchronous. The implementation deliberately does not depend on Z80 inte
 
 Keeping the trampoline in fixed CPU-card SRAM means the CPU-switch point does not depend on the 6809 MMR mapping. This is intended to allow the resident service to move to high physical RAM later without changing the hand-off mechanism.
 
+For 8088+Z80, `i8086/cpu_z80.inc` handles FD05 directly from private
+native RAM. Its loop calls the common `server_dispatch` once per
+request; that routine returns with CMD cleared and STATUS written,
+rather than switching CPUs itself. See [8088 backend](8088-z80.md)
+for the native calling contract.
+
 ## CBIOS target hooks
 
 The common 8080 CBIOS (`cpm22/bios/bios.asm`) uses the mailbox definitions
