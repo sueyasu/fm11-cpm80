@@ -39,7 +39,7 @@ the 1-based API sector to the 0-based MDC LBA.
 | 2HD other | 154 | 26 | 256 | 10900 |
 | HDD | model-dependent | 32 | 256 | unsupported |
 
-WRITE TRACK stream generation belongs to FORMAT.COM in commit 5;
+WRITE TRACK stream generation is implemented in FORMAT.COM;
 use the same FE/CHRN/F7, FB/data/F7 format as CP/M-86 FORMAT.
 The caller must provide the full stated byte count, with appropriate
 CHRN, gaps and sector sizes (including special 2HD track 0).
@@ -60,9 +60,8 @@ The caller is responsible for confirming destructive operations.
 ## Build and validation
 
 make test-raw-api builds all three BIOS/server variants and verifies
-the assembled jump table and operation range check. Actual controller
-I/O tests are separate. FORMAT.COM and its boot-system installation
-logic are not included in this commit.
+the assembled jump table and operation range check. Actual controller I/O tests are separate. See [FORMAT.md](FORMAT.md)
+for the formatter and system installation tests.
 
 ## Guest runtime diagnostic
 

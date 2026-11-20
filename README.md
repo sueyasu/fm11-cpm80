@@ -61,3 +61,5 @@ Original FM-11-specific code is covered by LICENSE; CP/M core by LICENSE.CPM.
 Original Fujitsu reference disk images are not distributed.
 
 Physical disk utility API: [docs/format-api.md](docs/format-api.md).
+
+The common [FORMAT.COM](docs/FORMAT.md) utility is built with `make format`.

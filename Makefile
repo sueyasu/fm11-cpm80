@@ -254,3 +254,21 @@ $(RAW_TEST_BUILD)/RAWTEST.COM: tests/rawtest.asm Makefile | $(RAW_TEST_BUILD)
 	$(ASM8080) $< -o$(RAW_TEST_BUILD)/rawtest
 	cp $(RAW_TEST_BUILD)/rawtest.bin $@
 rawtest: $(RAW_TEST_BUILD)/RAWTEST.COM
+
+# FORMAT.COM is one portable binary with IPLs for all native backends.
+# Building it needs both lwasm and NASM, but no proprietary source disk.
+FORMAT_BUILD := $(BUILD)/format
+FORMAT_IPLS := $(M6809_BUILD)/ipl_2d.bin $(M6809_BUILD)/ipl_2hd.bin $(M6809_BUILD)/ipl_hdd.bin $(I8086_BUILD)/ipl_2d.bin $(I8086_BUILD)/ipl_2hd.bin $(HDD_IPL)
+.PHONY: format test-format
+$(FORMAT_BUILD):
+	mkdir -p $@
+$(FORMAT_BUILD)/ipls.asm: tools/mk_format_ipls.py $(FORMAT_IPLS) | $(FORMAT_BUILD)
+	$(PYTHON) tools/mk_format_ipls.py $@ $(FORMAT_IPLS)
+$(FORMAT_BUILD)/FORMAT.COM: command/FORMAT.ASM $(FORMAT_BUILD)/ipls.asm Makefile | $(FORMAT_BUILD)
+	cat command/FORMAT.ASM $(FORMAT_BUILD)/ipls.asm > $(FORMAT_BUILD)/format.asm
+	$(ASM8080) $(FORMAT_BUILD)/format.asm -o$(FORMAT_BUILD)/format
+	cp $(FORMAT_BUILD)/format.bin $@
+	$(PYTHON) tools/check_binary.py $@ --max-size 0xdb00 --name "FORMAT.COM"
+format: $(FORMAT_BUILD)/FORMAT.COM
+test-format: format
+	$(PYTHON) tests/check_format.py $(FORMAT_BUILD)/FORMAT.COM $(FORMAT_IPLS)
