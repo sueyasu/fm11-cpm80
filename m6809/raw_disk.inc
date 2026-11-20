@@ -91,8 +91,16 @@ RawPoll
         bne     RawPoll
         bra     RawFdcBad
 RawFdcComplete
+        lda     RawOp
+        cmpa    #MBCMD_RAW_READ
+        bne     RawCheckWrite
+        lda     ,y
+        bita    #FDC_READERR
+        bra     RawCheckStatus
+RawCheckWrite
         lda     ,y
         bita    #FDC_WRITEERR
+RawCheckStatus
         bne     RawFdcBad
         andcc   #$FE
         bra     RawFdcExit

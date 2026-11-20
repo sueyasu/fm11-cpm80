@@ -63,3 +63,44 @@ make test-raw-api builds all three BIOS/server variants and verifies
 the assembled jump table and operation range check. Actual controller
 I/O tests are separate. FORMAT.COM and its boot-system installation
 logic are not included in this commit.
+
+## Guest runtime diagnostic
+
+```sh
+make rawtest
+cp build/rawtest/RAWTEST.COM external/commands/
+```
+
+Rebuild the boot disks on which the diagnostic will be run. The test
+uses only 8080 instructions and the public BIOS extension. The drive
+argument must be explicit. For example, with a 2D boot disk A:,
+a 2HD disk E: and an HDD I:, use:
+
+```text
+A>RAWTEST A:
+A>RAWTEST E:
+A>RAWTEST I:
+```
+
+These are read-only. They verify geometry, reject an invalid operation
+and drive, compare repeated physical reads at the first and last
+side-tracks, and check that 2HD track 0 transfers only 128 bytes.
+
+For destructive tests, mount **disposable scratch images** at B:
+(2D), F: (2HD) and/or I: (HDD). Stay logged into boot drive A:,
+then run:
+
+```text
+A>RAWTEST B: W
+A>RAWTEST F: W
+A>RAWTEST I: W
+```
+
+W refuses both boot and current drives. It nevertheless destroys
+data on the selected scratch disk. On floppies it formats side-tracks
+0 and last and reads back every sector on both tracks for E5h.
+Finally it writes A5h to the last physical sector, clears the buffer
+and verifies readback; for HDD only that final sector is written.
+Use existing readable formatted scratch images. Success ends in
+"PASS: physical disk API test". CPU type is 0, 1 or 2, respectively.
+Test both 6809 and a shared 8088/V20 native I/O variant.

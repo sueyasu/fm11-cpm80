@@ -244,3 +244,13 @@ test-hdd-6809: $(M6809_BUILD)/ipl_hdd.bin $(CPM_BUILD)/system62.bin $(M6809_BUIL
 .PHONY: test-raw-api
 test-raw-api: bios bios8088 biosv20 ioserver ioserver8088 ioserverv20
 	$(PYTHON) tests/check_raw_api.py $(Z80_BUILD)/bios.bin $(I8086_BUILD)/bios.bin $(V20_BUILD)/bios.bin
+
+# Runtime physical API diagnostic. Never installed automatically.
+RAW_TEST_BUILD := $(BUILD)/rawtest
+.PHONY: rawtest
+$(RAW_TEST_BUILD):
+	mkdir -p $@
+$(RAW_TEST_BUILD)/RAWTEST.COM: tests/rawtest.asm Makefile | $(RAW_TEST_BUILD)
+	$(ASM8080) $< -o$(RAW_TEST_BUILD)/rawtest
+	cp $(RAW_TEST_BUILD)/rawtest.bin $@
+rawtest: $(RAW_TEST_BUILD)/RAWTEST.COM
