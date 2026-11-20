@@ -97,7 +97,7 @@ core: $(CPM22_CORE)
 
 $(CPM22_CORE): cpm22/cpm22_fm11.asm | $(CPM_BUILD)
 	$(ASM8080) $< -o$(basename $@)
-	@test "$$(stat -c%s $@)" -eq 5632 || { echo "$@: expected 5632 bytes" >&2; exit 1; }
+	@test "$$(stat -c%s $@)" -eq 5632 || { echo "$@: got $(stat -c%s $@) bytes, expected 5632 bytes" >&2; exit 1; }
 
 $(FUJITSU_CPM_IMAGE):
 	@echo "error: missing $@" >&2

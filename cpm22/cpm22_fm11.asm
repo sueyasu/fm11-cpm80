@@ -3729,7 +3729,8 @@ CKSUMTBL:DB     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ;
 ; Keep the separately assembled CBIOS at F200h.  No dummy BIOS jump table
 ; bytes are emitted in this core image.
-        DS      BIOSBASE-$
+        DS      BIOSBASE-$-1
+        DB      0       ;emit last byte explicitly for raw binary output
 ;
 ;*
 ;******************   E N D   O F   C P / M   *****************
