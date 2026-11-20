@@ -4,7 +4,7 @@ CP/M 2.2 for the Fujitsu FM-11 with the Z80 card or NEC V20 8080 emulation mode.
 
 - 62K system: CCP at DC00h, BDOS entry at E406h, BIOS at F200h.
 - Fixed drive letters: A:-D: = 2D units 0-3; E:-H: = 2HD units 0-3, as in FM-11 CP/M-86.
-- 2D boots to A:, 2HD boots to E:. Warm boot preserves the current user and drive when available.
+- 2D boots to A:, 2HD boots to E:, 8088/V20 HDD boots to I:. Warm boot preserves the current user and drive when available.
 - Resident 6809 I/O service, DMA sector reads/writes, two-window write-back cache and physical RESTORE/SEEK.
 - Local console and serial console via the native mailbox service; bootable 2D and 2HD D88 and RAW images.
 
@@ -33,11 +33,12 @@ cpmls -f fm11-cpm80-2hd build/images/fm11-cpm80-2hd.raw
 The same definitions apply to the 8088+Z80 and V20 RAW images.
 They do not apply directly to D88 files.
 
-## HDD data drive (8088+Z80 and V20)
+## HDD data and boot drive (8088+Z80 and V20)
 
 I: maps to one whole MDC HDD, with the same filesystem layout as CP/M-86.
-See [docs/hdd-data.md](docs/hdd-data.md). HDD boot and 6809 HDD transport
-are not yet available.
+See [docs/hdd-data.md](docs/hdd-data.md) for data disks and regression tests.
+`make image8088-hdd` or `make imagev20-hdd` creates a bootable HDD;
+see [docs/boot-hdd.md](docs/boot-hdd.md). 6809 HDD transport is not yet available.
 
 ## Boot drive and SUBMIT
 

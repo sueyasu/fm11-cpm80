@@ -1,5 +1,5 @@
 ; Native entry and execution loop for the FM-11 8088 + Z80 card.
-; IPL enters CS:0000 with AL=physical boot drive (0 or 4).
+; IPL enters CS:0000 with AL=physical boot drive (0, 4 or 8).
 ; This include is emitted first, so start remains at offset zero.
 ; Only this backend installs the Z80 reset jump and switches CPU ownership.
 start:

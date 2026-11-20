@@ -51,9 +51,9 @@ Base address: `$FBF6`. The ten-byte block ends exactly at the top of Z80-visible
 |---:|---|---|
 | `+0` | CMD | command |
 | `+1` | STATUS | result, 0=success |
-| `+2` | DRIVE | CP/M drive 0..7 (0-3=2D, 4-7=2HD) |
+| `+2` | DRIVE | CP/M drive 0..8 (0-3=2D, 4-7=2HD, 8=HDD on 8088/V20) |
 | `+3` | FLAGS / DATA | disk write flags or console character/status |
-| `+4,+5` | TRACK_H/L | cylinder, big-endian for the 6809 |
+| `+4,+5` | TRACK_H/L | FDD cylinder or HDD side-track, big-endian |
 | `+6,+7` | SECTOR_H/L | CP/M 128-byte logical sector |
 | `+8,+9` | DMA_H/L | CP/M DMA address, big-endian for the 6809 |
 
@@ -69,6 +69,7 @@ If the protocol later needs more fields, the mailbox can grow downward from `$FB
 - `03` warm-boot system reload (synchronize/reset cache before reload)
 - `04` CACHE_SYNC: write all pending sectors, retain valid cache and FDC positions
 - `05` CACHE_RESET: synchronize, then invalidate all cache entries and FDC positions
+- `06` HDD_GEOM: 8088/V20 only; TRACK=DSM, SECTOR=OFF, both big-endian
 
 
 - `10` local console status (DATA=00h/FFh)

@@ -13,7 +13,7 @@ org 0
 %endif
 
 ; Common cold initialization.
-; IN: AL=boot drive (0 or 4), DS=CS=native segment, ES=CPM_SEG,
+; IN: AL=boot drive (0, 4 or 8), DS=CS=native segment, ES=CPM_SEG,
 ;     private native stack, maskable interrupts disabled.
 ; OUT: CF=0 system loaded and workspace initialized, CF=1 disk failure.
 ; Preserves segment registers and stack balance; general registers scratch.
@@ -174,6 +174,10 @@ finish_ok:
 ; Read CYL 1, sequential sectors, split at side boundary on 2D.
 ; CX = 26 cold / 22 warm. Copy 256 bytes to shared CP/M bank 1 per transfer.
 reload_system:
+    cmp byte [boot_drive],HDD_BOOT_DRIVE
+    jne .floppy
+    jmp reload_hdd_system
+.floppy:
     mov di,0xdc00
     mov word [load_position],0x0101
     mov byte [load_head],0
@@ -198,6 +202,36 @@ reload_system:
     mov byte [load_position],1
     inc byte [load_head]
 .advance_hd:
+    loop .next
+    clc
+.bad:
+    ret
+
+; HDD system payload follows the resident server slot in cylinder 0.
+; CX=26 cold / 22 warm. CACHE_RESET has invalidated geometry on WBOOT.
+reload_hdd_system:
+    push cx
+    call hdd_geometry
+    pop cx
+    jc .bad
+    mov byte [cur_disk],HDD_BOOT_DRIVE
+    mov word [cur_track],0
+    mov word [cur_sector],HDD_SYSTEM_LBA*2
+    mov di,0xdc00
+.next:
+    call hdd_read
+    jc .bad
+    push cx
+    mov si,fdc2d_buffer
+    mov cx,128
+    rep movsw
+    pop cx
+    add word [cur_sector],2
+    cmp word [cur_sector],64
+    jb .advance
+    mov word [cur_sector],0
+    inc word [cur_track]
+.advance:
     loop .next
     clc
 .bad:

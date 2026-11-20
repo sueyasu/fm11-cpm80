@@ -57,8 +57,8 @@ prepopulate a disposable image so that a file uses a block >=512
 (8 MiB relative), and check its bytes after reading and writing;
 also test random-write function 40 and the largest model. The
 geometry test checks the arithmetic model, not the assembled BDOS
-execution. Assembler size checks remain in the build. HDD boot,
-FORMAT, and 6809 MDC transport are outside this change.
+execution. Assembler size checks remain in the build. HDD boot is described in [boot-hdd.md](boot-hdd.md).
+FORMAT and 6809 MDC transport remain outside the current implementation.
 
 ## M2243B last-block regression
 
@@ -82,7 +82,7 @@ M2243B last-block test
 PASS: DSM=1006h
 PASS: TAIL.DAT opened
 PASS: all 128 records read
-PASS: random write/readback; verify image on host
+PASS: random write/readback - verify image on host
 ```
 
 HDDTEST uses only standard BDOS calls and 8080 instructions.

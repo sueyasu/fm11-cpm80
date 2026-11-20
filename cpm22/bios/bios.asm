@@ -5,8 +5,8 @@
 ;   BDOS = E400h
 ;   BIOS = F200h
 ;   disk workspace        = F970h-FBE7h
-;   boot drive            = FBF4h (0=A, 4=E)
-;   boot type             = FBF5h (0=2D, 1=2HD)
+;   boot drive            = FBF4h (0=A, 4=E, 8=I)
+;   boot type             = FBF5h (0=2D, 1=2HD, 2=HDD)
 ;   mailbox               = FBF6h-FBFFh
 ;
 ; Intel 8080 syntax for asm8080. All hardware access is via the mailbox
@@ -19,6 +19,7 @@ WBOOTENT EQU     BIOSBASE+3
 BOOTTYPE EQU     0FBF5H
 BOOT_2D EQU     00H
 BOOT_2HD EQU     01H
+BOOT_HDD EQU     02H
 
 ; CP/M mutable disk workspace is packed directly below the shared boot-type
 ; byte and mailbox. All eight ALVs retain the larger 2HD size to keep

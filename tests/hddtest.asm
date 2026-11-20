@@ -199,7 +199,7 @@ PRINT   MVI C,9
         JMP 5
 MSGSTART DB 'M2243B last-block test',13,10,24H
 MSGREAD DB 'PASS: all 128 records read',13,10,24H
-MSGOK   DB 'PASS: random write/readback; verify image on host',13,10,24H
+MSGOK   DB 'PASS: random write/readback - verify image on host',13,10,24H
 MSGGEO DB 'PASS: DSM=1006h',13,10,24H
 MSGOPEN DB 'PASS: TAIL.DAT opened',13,10,24H
 MSGDRV DB 'FAIL: current drive=',24H

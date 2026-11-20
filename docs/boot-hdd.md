@@ -1,0 +1,76 @@
+# FM-11 CP/M-80 whole-HDD boot (8088+Z80 and V20)
+
+One physical MDC HDD maps to I:, with the same filesystem as the CP/M-86
+whole-HDD data area. All nine models in [hdd-data.md](hdd-data.md) are
+supported by design. HDD boot for 6809+Z80 is not implemented yet.
+
+| Physical LBA (256 bytes) | Contents |
+|---|---|
+| 0–1 | Shared 512-byte HDD IPL |
+| 2–25 | 6 KiB native server, specific to 8088+Z80 or V20 |
+| 26–51 | 0x1a00-byte CCP/BDOS/CBIOS, specific to backend |
+| 52 to end of cylinder 0 | Reserved (E5h) |
+| Cylinder 1 onward | CP/M filesystem, identical to data-only images |
+
+The smallest supported cylinder has 64 sectors, so all system sectors
+fit in cylinder 0. The reset ROM (4 KiB, FF000h) reads LBA 0–1 into
+07C0:0000, then the IPL relocates to 0100:0000 and loads the native
+server into 0400:0000, passing AL=8. The server SENSEs the HDD and
+loads 26 sectors starting at LBA 26 into 1000:DC00. WBOOT flushes
+the cache, refreshes geometry, and reloads only LBA 26–47 (22 sectors,
+CCP+BDOS); CBIOS and ALV are not overwritten. The existing Z80 FD05
+or V20 BRKEM/CALLN backend is unchanged. BOOTDRV=8, BOOTTYPE=2.
+FDD boot remains supported.
+
+The supplied HDD reset ROM and IPL read via binary LBA / DMA2,
+adapted from fm11-cpm86. They do not establish compatibility with
+the original Fujitsu HDD boot ROM. Emulator testing is required.
+
+## Build
+
+```sh
+make imagev20-hdd HDD_MODEL=m2233b
+# or
+make image8088-hdd HDD_MODEL=m2233b
+make test-hdd-boot
+```
+
+Outputs:
+- build/i8086/hdd_bootrom.bin (shared)
+- build/i8086/ipl_hdd.bin (shared)
+- build/images/fm11-cpm80-v20-hdd.img or fm11-cpm80-8088-hdd.img
+
+Optional COM files from external/commands are imported in user 0.
+Image creation refuses to overwrite an existing file. Use
+HDD_V20_IMAGE or HDD_8088_IMAGE to choose a distinct output path
+for another model or test. The model must match the image size.
+The test target checks both binary layouts and all nine model
+images with a multi-extent file, not actual boot execution.
+
+Use your existing working CPU and display configuration. Set HDD=true
+under [DIPSW], keep main_cpu=8088, and select the proper backend
+(V20/no Z80, or 8088/Z80). Example:
+
+```ini
+[hdd]
+image = /absolute/path/to/fm11-cpm80-v20-hdd.img
+```
+
+```sh
+fm11-sdl --config /path/to/fm11emu.conf \
+  --8088-rom /path/to/fm11-cpm80/build/i8086/hdd_bootrom.bin
+```
+
+The initial prompt must be I>. Boot first without mounted floppies
+to demonstrate that both cold boot and WBOOT (Ctrl-C) work from HDD.
+Run DIR and a supplied COM program such as STAT, copy a file on I:,
+then Ctrl-C and confirm it is retained. Test FDD access and WBOOT
+while logged into a mounted FDD separately. For persistence, exit
+after WBOOT and use cpmls -f fm11-cpm80-m2233b on the HDD image.
+SUBMIT uses the actual boot drive I: as before.
+
+Use separate images for the two CPU backends; their resident and
+CBIOS code are different. Do not mount the same image concurrently.
+Do not overwrite a data HDD with the image builder; FORMAT /S is
+planned separately. The dedicated boot ROM does not select FDD
+as a fallback; use the normal FDD ROM for FDD boot.

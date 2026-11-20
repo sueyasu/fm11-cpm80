@@ -213,3 +213,23 @@ hdd-tail-test: $(HDD_TEST_BUILD)/HDDTEST.COM
 	$(PYTHON) tools/mk_hdd_tail_test.py create $(HDD_TEST_IMAGE) $<
 verify-hdd-tail: $(HDD_TEST_BUILD)/HDDTEST.COM
 	$(PYTHON) tools/mk_hdd_tail_test.py verify $(HDD_TEST_IMAGE) $<
+
+# Whole-HDD boot: one common 8088/V20 ROM and IPL, separate native/system slots.
+HDD_BOOTROM := $(I8086_BUILD)/hdd_bootrom.bin
+HDD_IPL := $(I8086_BUILD)/ipl_hdd.bin
+HDD_8088_IMAGE ?= $(IMAGE_BUILD)/fm11-cpm80-8088-hdd.img
+HDD_V20_IMAGE ?= $(IMAGE_BUILD)/fm11-cpm80-v20-hdd.img
+.PHONY: image8088-hdd imagev20-hdd hdd-bootrom test-hdd-boot
+hdd-bootrom: $(HDD_BOOTROM) $(HDD_IPL)
+$(HDD_BOOTROM): i8086/hdd_bootrom.asm i8086/hdd_boot_io.inc Makefile | $(I8086_BUILD)
+	$(NASM) -f bin -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x1000 --name "HDD reset ROM"
+$(HDD_IPL): i8086/ipl_hdd.asm i8086/hdd_boot_io.inc i8086/memory.inc Makefile | $(I8086_BUILD)
+	$(NASM) -f bin -o $@ $<
+	$(PYTHON) tools/check_binary.py $@ --max-size 0x200 --name "HDD IPL"
+image8088-hdd: hdd-bootrom $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin
+	$(PYTHON) tools/mk_hdd_boot.py --model $(HDD_MODEL) --ipl $(HDD_IPL) --server $(I8086_BUILD)/ioserver.bin --system $(I8086_BUILD)/system62.bin --commands $(COMMANDS_DIR) $(HDD_8088_IMAGE)
+imagev20-hdd: hdd-bootrom $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin
+	$(PYTHON) tools/mk_hdd_boot.py --model $(HDD_MODEL) --ipl $(HDD_IPL) --server $(V20_BUILD)/ioserver.bin --system $(V20_BUILD)/system62.bin --commands $(COMMANDS_DIR) $(HDD_V20_IMAGE)
+test-hdd-boot: hdd-bootrom $(I8086_BUILD)/system62.bin $(I8086_BUILD)/ioserver.bin $(V20_BUILD)/system62.bin $(V20_BUILD)/ioserver.bin
+	PYTHONPATH=tools $(PYTHON) tests/check_hdd_boot.py $(I8086_BUILD) $(V20_BUILD)

@@ -7,3 +7,8 @@ NATIVE_STACK_TOP equ 0x2000
 NATIVE_PHYS equ NATIVE_SEG*16
 CACHE_SEG equ 0x0600
 CPM_SEG equ 0x1000
+
+; Whole-HDD reserved cylinder layout (256-byte physical sectors).
+HDD_BOOT_DRIVE equ 8
+HDD_SERVER_LBA equ 2
+HDD_SYSTEM_LBA equ HDD_SERVER_LBA+NATIVE_SLOT/256

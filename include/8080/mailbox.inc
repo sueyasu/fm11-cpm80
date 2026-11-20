@@ -1,7 +1,7 @@
 ; Common FM-11 CP/M-80 mailbox ABI, independent of native CPU.
 ; Shared mailbox. Place the ten-byte communication block at the very top
 ; of the common CP/M RAM layout so lower memory remains available to CP/M.
-BOOTDRV EQU     0FBF4H  ; logical boot drive (0=2D, 4=2HD)
+BOOTDRV EQU     0FBF4H  ; logical boot drive (0=2D, 4=2HD, 8=HDD)
 MBOX_BASE EQU     0FBF6H
 MBOX_CMD EQU     MBOX_BASE+0
 MBOX_STATUS EQU     MBOX_BASE+1
