@@ -85,6 +85,7 @@ ColdClearWorkspace
         cmpu    #0
         bne     ColdClearWorkspace
 
+        lbsr    SerialInit
         lda     #$C3
         sta     >$0000
         ldd     #$00F2
@@ -114,6 +115,16 @@ ServiceLoop
         lbeq    ServiceLocalIn
         cmpb    #MBCMD_LOCAL_CONOUT
         lbeq    ServiceLocalOut
+        cmpb    #MBCMD_SERIAL_CONST
+        lbeq    ServiceSerialConst
+        cmpb    #MBCMD_SERIAL_CONIN
+        lbeq    ServiceSerialIn
+        cmpb    #MBCMD_SERIAL_CONOUT
+        lbeq    ServiceSerialOut
+        cmpb    #MBCMD_SERIAL_LISTST
+        lbeq    ServiceSerialListSt
+        cmpb    #MBCMD_SERIAL_MIRROR
+        lbeq    ServiceSerialMirror
 
 ServiceBad
         lda     #MBSTAT_ERROR
@@ -220,6 +231,69 @@ SliWait
 ServiceDone
         clr     MBOX_CMD
         jmp     TRAMPOLINE_BASE
+
+* USART0 initialization: identical 8251 mode/command sequence to the former
+* Z80 BIOS. Retain the firmware baud clock and do not reinitialize on WBOOT.
+SerialInit
+        clra
+        sta     >FM11_SER_STAT
+        sta     >FM11_SER_STAT
+        sta     >FM11_SER_STAT
+        lda     #$40
+        sta     >FM11_SER_STAT
+        lda     #$4E
+        sta     >FM11_SER_STAT
+        lda     #$27
+        sta     >FM11_SER_STAT
+        rts
+
+* Nonblocking status: data=00/FF, never consume a received byte here.
+ServiceSerialConst
+        lda     >FM11_SER_STAT
+        anda    #I8251_RXRDY
+        bra     SerialStatus
+ServiceSerialListSt
+        lda     >FM11_SER_STAT
+        anda    #I8251_TXRDY
+SerialStatus
+        beq     SerialStoreData
+        lda     #$FF
+SerialStoreData
+        sta     MBOX_DATA
+SerialOk
+        clr     MBOX_STATUS
+        lbra    ServiceDone
+
+* TTY/BAT/READER block in the native server rather than switching CPUs
+* repeatedly. The BIOS retains the 7-bit input mask.
+ServiceSerialIn
+        lda     >FM11_SER_STAT
+        bita    #I8251_RXRDY
+        beq     ServiceSerialIn
+        lda     >FM11_SER_DATA
+        bra     SerialStoreData
+
+* TTY/BAT/LIST/PUNCH preserve the original blocking TXRDY behavior.
+ServiceSerialOut
+        lda     >FM11_SER_STAT
+        bita    #I8251_TXRDY
+        beq     ServiceSerialOut
+SerialSend
+        lda     MBOX_DATA
+        sta     >FM11_SER_DATA
+        bra     SerialOk
+
+* UC1 mirroring must not hang the local console if USART TXRDY stays low.
+* The loop count is retained, but the wall-clock timeout is CPU-dependent.
+ServiceSerialMirror
+        ldx     #SER_MIRROR_WAIT
+SerialMirrorWait
+        lda     >FM11_SER_STAT
+        bita    #I8251_TXRDY
+        bne     SerialSend
+        leax    -1,x
+        bne     SerialMirrorWait
+        lbra    ServiceBad
 
 * Send A through Display Sub System CHARACTER OUT ($12).  FD05 bit 7 controls
 * the subsystem while bit 0 remains clear so the 6809 retains the machine.

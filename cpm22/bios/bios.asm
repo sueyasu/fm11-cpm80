@@ -82,7 +82,6 @@ BOOT EQU     $
         STA     CURDRV
         LXI     H,0080H
         SHLD    CURDMA
-        CALL    SERIAL_INIT  ; keep TTY ready for STAT CON:=TTY:
         CALL    SETVEC
         CALL    COLD_BANNER
         LDA     BOOTDRV
@@ -200,22 +199,11 @@ SETVEC  MVI     A,0C3H  ; JP opcode
 ; Console.
 ;
 ; CP/M IOBYTE bits 0-1 select CON:. CRT (01) is the default and selects the
-; FM-11 local screen/keyboard through the resident 6809 I/O server. TTY (00)
-; remains the direct Z80 8251 serial console. BAT falls back to TTY; UC1 polls both inputs and mirrors output.
+; FM-11 local screen/keyboard through the resident I/O server. TTY (00)
+; and BAT use the serial mailbox services; UC1 polls both inputs and mirrors output.
 ; LIST/PUNCH/READER stay on the serial device and do not follow CON:.
+; USART initialization is performed by the native I/O server at cold boot.
 ; ----------------------------------------------------------------------
-
-SERIAL_INIT  XRA     A
-        STA     FM11_SER_STAT
-        STA     FM11_SER_STAT
-        STA     FM11_SER_STAT
-        MVI     A,040H
-        STA     FM11_SER_STAT
-        MVI     A,04EH
-        STA     FM11_SER_STAT
-        MVI     A,027H
-        STA     FM11_SER_STAT
-        RET
 
 CONST   LDA     0003H
         ANI     03H
@@ -227,10 +215,17 @@ CONST   LDA     0003H
         ORA     A
         RNZ
 
-SERIAL_CONST  LDA     FM11_SER_STAT
-        ANI     I8251_RXRDY
-        RZ
-        MVI     A,0FFH
+SERIAL_CONST  MVI     A,MBCMD_SERIAL_CONST
+        JMP     SERIAL_STATUS
+
+; Status services return 00h/FFh in MBOX_DATA; a service error is not ready.
+SERIAL_STATUS  CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     SERIAL_NOT_READY
+        LDA     MBOX_DATA
+        ORA     A
+        RET
+SERIAL_NOT_READY  XRA     A
         RET
 
 LOCAL_CONST  MVI     A,MBCMD_LOCAL_CONST
@@ -249,11 +244,11 @@ CONIN   LDA     0003H
         CPI     03H
         JZ      SHARED_CONIN
 
-SERIAL_CONIN EQU     $
-SERIAL_CONIN_CONIN_WAIT  LDA     FM11_SER_STAT
-        ANI     I8251_RXRDY
-        JZ      SERIAL_CONIN_CONIN_WAIT
-        LDA     FM11_SER_DATA
+SERIAL_CONIN  MVI     A,MBCMD_SERIAL_CONIN
+        CALL    MBOX_SIMPLE
+        ORA     A
+        JNZ     SERIAL_CONIN
+        LDA     MBOX_DATA
         ANI     07FH
         RET
 
@@ -299,30 +294,21 @@ CONOUT  LDA     0003H
         JZ      SHARED_CONOUT
 
 SERIAL_CONOUT  PUSH    PSW
-SERIAL_CONOUT_CONOUT_WAIT  LDA     FM11_SER_STAT
-        ANI     I8251_TXRDY
-        JZ      SERIAL_CONOUT_CONOUT_WAIT
+        MOV     A,C
+        STA     MBOX_DATA
+        MVI     A,MBCMD_SERIAL_CONOUT
+        CALL    MBOX_SIMPLE
         POP     PSW
         MOV     A,C
-        STA     FM11_SER_DATA
         RET
 
+; Mirror output without letting a stalled serial port block the local console.
+; A timeout is not retried; the character has already been sent locally.
 SHARED_CONOUT  CALL    LOCAL_CONOUT
-        PUSH    H
-        LXI     H,0FFFFH
-SHARED_CONOUT_MIRROR_WAIT  LDA     FM11_SER_STAT
-        ANI     I8251_TXRDY
-        JNZ     SHARED_CONOUT_MIRROR_READY
-        DCX     H
-        MOV     A,H
-        ORA     L
-        JNZ     SHARED_CONOUT_MIRROR_WAIT
-        POP     H
-        RET
-SHARED_CONOUT_MIRROR_READY  MOV     A,C
-        STA     FM11_SER_DATA
-        POP     H
-        RET
+        MOV     A,C
+        STA     MBOX_DATA
+        MVI     A,MBCMD_SERIAL_MIRROR
+        JMP     MBOX_SIMPLE
 
 LOCAL_CONOUT EQU     $
 LOCAL_CONOUT_LOCAL_CONOUT_RETRY  MOV     A,C
@@ -339,11 +325,8 @@ PUNCH   JMP     SERIAL_CONOUT
 
 READER  JMP     SERIAL_CONIN
 
-LISTST  LDA     FM11_SER_STAT
-        ANI     I8251_TXRDY
-        RZ
-        MVI     A,0FFH
-        RET
+LISTST  MVI     A,MBCMD_SERIAL_LISTST
+        JMP     SERIAL_STATUS
 
 ; ----------------------------------------------------------------------
 ; Disk parameter state

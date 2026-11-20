@@ -26,9 +26,21 @@ MBCMD_WBOOT     equ     $03
 MBCMD_LOCAL_CONST equ   $10
 MBCMD_LOCAL_CONIN equ   $11
 MBCMD_LOCAL_CONOUT equ  $12
+MBCMD_SERIAL_CONST equ  $13
+MBCMD_SERIAL_CONIN equ  $14
+MBCMD_SERIAL_CONOUT equ  $15
+MBCMD_SERIAL_LISTST equ  $16
+MBCMD_SERIAL_MIRROR equ  $17
 
 MBSTAT_OK       equ     $00
 MBSTAT_ERROR    equ     $01
+
+* Standard 8251 USART0, owned by the native I/O server.
+FM11_SER_DATA   equ     $FD06
+FM11_SER_STAT   equ     $FD07
+I8251_TXRDY     equ     $01
+I8251_RXRDY     equ     $02
+SER_MIRROR_WAIT equ     $FFFF
 
 * Display Sub System interface used by the FM-11 local console.  FD05 has
 * independent control bits: bit 0 selects the Z80/main-CPU owner, while bit 7

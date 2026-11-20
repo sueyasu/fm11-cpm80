@@ -58,7 +58,6 @@ The project deliberately uses only interfaces known to be appropriate from the Z
 
 - `$FD05` CPU arbitration
 - `$FD2F` Z80 bank register
-- standard 8251 serial data/status registers
 - shared memory/status interfaces where documented
 
 FDC, DMA and 6809 MMR registers are owned by the main CPU service rather than

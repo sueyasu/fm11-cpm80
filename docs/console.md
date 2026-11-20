@@ -4,6 +4,14 @@ CON: defaults to CRT. TTY and BAT use USART0; UC1 polls both local and
 serial input, alternates when both are ready, and mirrors output with a
 bounded USART wait. LIST/PUNCH/READER remain serial; LISTST reports TXRDY.
 
+USART0 initialization and all serial I/O now run in the native 6809 service.
+The CBIOS only selects the IOBYTE device and passes commands through the
+mailbox. TTY/BAT/READER input and ordinary output wait in the server, with one
+CPU hand-off per operation. CONST and LISTST are nonblocking and return
+00h/FFh. UC1 output uses a separate bounded mirror command, with 65535 polls
+maximum; the real timeout differs from the former Z80 loop. A mirror timeout
+is not retried. Cold boot initializes the USART; WBOOT does not reset it.
+
 The ANSI parser accepts up to eight CSI parameters (values saturated at
 255). Excess parameters cause the sequence to be ignored. Private modes
 are ignored. WBOOT discards incomplete sequences. Native display errors

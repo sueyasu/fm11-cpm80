@@ -7,14 +7,6 @@ FM11_CPUCTL EQU     0FD05H  ; bit 0: 1=Z80 runs, 0=main CPU runs
 FM11_BANK EQU     0FD2FH  ; Z80 bank register, x4000-xBFFF window
 FM11_Z80INT EQU     0FD50H  ; Z80-card interrupt control (TBD)
 
-; Standard 8251. The BIOS currently assumes firmware/loader has
-; initialized its mode/baud-clock environment before Z80 hand-off.
-FM11_SER_DATA EQU     0FD06H
-FM11_SER_STAT EQU     0FD07H
-
-I8251_TXRDY EQU     01H
-I8251_RXRDY EQU     02H
-
 ; Shared mailbox. Place the ten-byte communication block at the very top
 ; of Z80-visible RAM so lower memory remains available to CP/M.
 BOOTDRV EQU     0FBF4H  ; logical boot drive (0=2D, 4=2HD)
@@ -38,6 +30,11 @@ MBCMD_WBOOT EQU     03H
 MBCMD_LOCAL_CONST EQU     10H
 MBCMD_LOCAL_CONIN EQU     11H
 MBCMD_LOCAL_CONOUT EQU     12H
+MBCMD_SERIAL_CONST EQU     13H
+MBCMD_SERIAL_CONIN EQU     14H
+MBCMD_SERIAL_CONOUT EQU     15H
+MBCMD_SERIAL_LISTST EQU     16H
+MBCMD_SERIAL_MIRROR EQU     17H
 
 MBSTAT_OK EQU     00H
 MBSTAT_ERROR EQU     01H
