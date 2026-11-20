@@ -17,6 +17,7 @@ I8251_RXRDY:    equ     02h
 
 ; Shared mailbox. Place the ten-byte communication block at the very top
 ; of Z80-visible RAM so lower memory remains available to CP/M.
+BOOTDRV:        equ     0FBF4h ; logical boot drive (0=2D, 4=2HD)
 MBOX_BASE:      equ     0FBF6h
 MBOX_CMD:       equ     MBOX_BASE+0
 MBOX_STATUS:    equ     MBOX_BASE+1

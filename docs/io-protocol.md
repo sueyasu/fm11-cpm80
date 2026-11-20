@@ -8,7 +8,7 @@ The Z80-visible mailbox occupies the top ten bytes of Z80 RAM, `$FBF6-$FBFF`. Th
 
 1. Z80 fills the mailbox at `$FBF6-$FBFF`.
 2. Z80 writes `0` to `$FD05` bit 0. The Z80 stops and the main 6809 resumes inside the fixed-SRAM trampoline at `$FE00`.
-3. The trampoline jumps to the resident 6809 service at `$DE00`.
+3. The trampoline jumps to the resident 6809 service at `$D000`.
 4. The resident service performs the requested operation and writes result status to the mailbox.
 5. The service jumps back to the `$FE00` trampoline.
 6. The trampoline writes `1` to `$FD05` bit 0. The 6809 stops and the Z80 resumes at the instruction following its hand-off write.
@@ -25,7 +25,7 @@ Base address: `$FBF6`. The ten-byte block ends exactly at the top of Z80-visible
 |---:|---|---|
 | `+0` | CMD | command |
 | `+1` | STATUS | result, 0=success |
-| `+2` | DRIVE | CP/M drive 0..7 |
+| `+2` | DRIVE | CP/M drive 0..7 (0-3=2D, 4-7=2HD) |
 | `+3` | FLAGS | command-specific flags |
 | `+4,+5` | TRACK_H/L | cylinder, big-endian for the 6809 |
 | `+6,+7` | SECTOR_H/L | CP/M 128-byte logical sector |

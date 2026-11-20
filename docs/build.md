@@ -2,6 +2,7 @@
 
 ## Required tools
 
+- `asm8080` for the CP/M 2.2 CCP/BDOS (same assembler as PC-9801 CP/M-80)
 - `z80asm` for the Z80 BIOS
 - `lwasm` from LWTOOLS, used in strict 6809 mode (`--6809`)
 - Python 3
@@ -13,16 +14,13 @@ On Ubuntu, install the Z80 assembler with:
 sudo apt install z80asm
 ```
 
-## External CCP + BDOS
+## CCP + BDOS
 
-The active build is a **62K CP/M 2.2** system. It expects:
-
-```text
-external/cpm22/ccpbdos62.bin
-```
-
-The file must be exactly `$1600` (5632) bytes and represents CCP at `$DC00`
-followed by BDOS through `$F1FF`. The BIOS is assembled at `$F200`.
+The active build assembles the 62K core from `cpm22/cpm22_fm11.asm`,
+adapted from PC-9801 CP/M-80 v1.1. No external binary is required.
+The generated `build/cpm22/ccpbdos62.bin` must be exactly 5632 bytes
+(DC00h-F1FFh). The BIOS is assembled at F200h. BDOS function 13 reads the
+boot-drive byte at FBF4h and ignores the caller's DE parameter.
 
 The locally owned Fujitsu reference image can still be used to extract its
 original 56K CCP+BDOS for comparison. `make extract-core` writes that separate
@@ -32,7 +30,7 @@ reference file to:
 external/cpm22/ccpbdos56.bin
 ```
 
-It does not overwrite the active 62K core.
+It does not overwrite the assembled 62K core.
 
 ## External CP/M commands
 
@@ -52,8 +50,10 @@ tracked by Git.
 DC00-E3FF  CCP
 E400-F1FF  BDOS
 F200-F5FF  BIOS slot (maximum 1 KiB)
-F600-F99F  free
-F9A0-FBE7  DIRBUF / CSV / ALV workspace
+F600-F95F  free / BIOS stack (SP=F960h)
+F970-FBE7  DIRBUF / CSV / ALV workspace
+FBF4       logical boot drive (0 or 4)
+FBF5       boot controller family (0 or 1)
 FBF6-FBFF  Z80/6809 mailbox
 FC00-FFFF  memory-mapped I/O
 ```
@@ -75,6 +75,7 @@ Useful individual targets:
 
 ```sh
 make check-tools
+make core
 make bios
 make ioserver
 make system
@@ -89,6 +90,7 @@ make clean
 Outputs include:
 
 ```text
+build/cpm22/ccpbdos62.bin
 build/z80/bios.bin
 build/m6809/ioserver.bin
 build/m6809/ipl_2d.bin

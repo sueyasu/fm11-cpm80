@@ -7,7 +7,7 @@
 * workspace may occupy D000-E7FF; E800-EFFF is reserved for the stack.
 *
 * A on entry identifies the boot floppy family: 0=2D Mini FDC, 1=2HD
-* Standard FDC.  A:-D: always map to the boot family and E:-H: to the other.
+* Standard FDC.  A:-D: always map to 2D and E:-H: to 2HD.
 
         include "fm11.inc"
 
@@ -39,6 +39,9 @@ IoServerStart
         lds     #IOSERVER_STACK_TOP
         anda    #$01
         sta     BOOTTYPE
+        lsla
+        lsla
+        sta     BOOTDRV
         clr     MBOX_CMD
         clr     MBOX_STATUS
         clr     LocalKeyValid
@@ -563,16 +566,11 @@ ResolveLogicalDrive
         bhs     RldBad
         anda    #$03
         sta     PhysDrive
-        lda     BOOTTYPE
-        anda    #$01
-        sta     PhysIs2HD
         lda     MBOX_DRIVE
-        bita    #$04
-        beq     RldDone
-        lda     PhysIs2HD
-        eora    #$01
+        anda    #$04
+        lsra
+        lsra
         sta     PhysIs2HD
-RldDone
         andcc   #$FE
         rts
 RldBad
@@ -1060,11 +1058,9 @@ AssDone
         rts
 
 InitBootSystemRead
-        clr     MBOX_DRIVE
-        clr     PhysDrive
-        lda     BOOTTYPE
-        anda    #$01
-        sta     PhysIs2HD
+        lda     BOOTDRV
+        sta     MBOX_DRIVE
+        lbsr    ResolveLogicalDrive
         lda     #SYSTEM_TRACK
         sta     PhysTrack
         clr     PhysSide

@@ -5,6 +5,7 @@
 
 CPUCTL          equ     $FD05
 
+BOOTDRV         equ     $FBF4          * logical boot drive (0=A, 4=E)
 MBOX_BASE       equ     $FBF6
 MBOX_CMD        equ     MBOX_BASE+0
 MBOX_STATUS     equ     MBOX_BASE+1

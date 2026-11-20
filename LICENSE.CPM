@@ -1,0 +1,12 @@
+CP/M 2.2 Copyright and License
+=============================
+
+This distribution contains CP/M 2.2 CCP/BDOS reconstructed by Clark A.
+Calkins and adapted from the PC-9801 CP/M-80 port. CP/M was originally
+developed by Digital Research, Inc.
+
+CP/M and its derivatives are made available under the permission granted
+by Bryan Sparks, President of DRDOS, Inc., as clarified on July 9, 2022.
+See http://www.cpm.z80.de/license.html for the license information.
+CP/M is not placed in the public domain; original rights are retained.
+The original FM-11-specific code remains under LICENSE.

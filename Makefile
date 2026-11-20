@@ -1,5 +1,6 @@
 SHELL := /bin/sh
 
+ASM8080 ?= asm8080
 Z80ASM  ?= z80asm
 LWASM   ?= lwasm
 # Enable the resident write-through floppy cache by default.
@@ -12,7 +13,7 @@ M6809_BUILD := $(BUILD)/m6809
 CPM_BUILD   := $(BUILD)/cpm22
 IMAGE_BUILD := $(BUILD)/images
 
-CPM22_CORE         ?= external/cpm22/ccpbdos62.bin
+CPM22_CORE         := $(CPM_BUILD)/ccpbdos62.bin
 CPM22_FUJITSU_CORE ?= external/cpm22/ccpbdos56.bin
 FUJITSU_CPM_IMAGE  ?= external/reference/cpm2d00.img
 COMMANDS_DIR       ?= external/commands
@@ -23,11 +24,12 @@ D88_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.d88
 RAW_IMAGE_2HD := $(IMAGE_BUILD)/fm11-cpm80-2hd.raw
 COMMAND_FILES := $(wildcard $(COMMANDS_DIR)/*.COM) $(wildcard $(COMMANDS_DIR)/*.com)
 
-.PHONY: all check-tools bios ioserver ipl system image image2d image2hd extract-core clean
+.PHONY: all check-tools core bios ioserver ipl system image image2d image2hd extract-core clean
 
 all: check-tools image
 
 check-tools:
+	@command -v $(ASM8080) >/dev/null 2>&1 || { echo "error: asm8080 not found" >&2; exit 1; }
 	@command -v $(Z80ASM) >/dev/null 2>&1 || { echo "error: z80asm not found" >&2; echo "Install it with: sudo apt install z80asm" >&2; exit 1; }
 	@command -v $(LWASM) >/dev/null 2>&1 || { echo "error: lwasm not found" >&2; exit 1; }
 	@command -v $(PYTHON) >/dev/null 2>&1 || { echo "error: python3 not found" >&2; exit 1; }
@@ -89,10 +91,11 @@ $(D88_IMAGE_2HD): $(M6809_BUILD)/ipl_2hd.bin $(CPM_BUILD)/system62.bin $(M6809_B
 		--raw-output $(RAW_IMAGE_2HD) \
 		--label "FM11 CPM80 2HD"
 
-$(CPM22_CORE):
-	@echo "error: missing $@" >&2
-	@echo "Place a 62K CP/M 2.2 CCP+BDOS binary there (exactly 0x1600 bytes)." >&2
-	@exit 1
+core: $(CPM22_CORE)
+
+$(CPM22_CORE): cpm22/cpm22_fm11.asm | $(CPM_BUILD)
+	$(ASM8080) $< -o$(basename $@)
+	@test "$$(stat -c%s $@)" -eq 5632 || { echo "$@: expected 5632 bytes" >&2; exit 1; }
 
 $(FUJITSU_CPM_IMAGE):
 	@echo "error: missing $@" >&2

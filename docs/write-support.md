@@ -14,7 +14,7 @@ Mini FDC transfers use DMA channel 0. `PhysBuf` remains necessary because CP/M r
 
 The CP/M WRITE type passed in register C is retained in `MBOX_FLAGS`; the implementation deliberately uses the same safe read/modify/write path for normal, directory, and unallocated writes.
 
-Drives E:-H: still return an error because the Standard FDC path is not implemented yet.
+Drives E:-H: use the equivalent Standard FDC / DMA channel 1 path. Drive letters remain fixed regardless of the boot controller.
 
 ## Physical floppy positioning
 

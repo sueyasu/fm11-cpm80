@@ -37,7 +37,7 @@ The complete `system62.bin` is therefore `$1A00` bytes, or 26 physical
 256-byte sectors, beginning at T1/H0/S1.
 
 The first operation performed by the resident I/O server during cold boot is to
-establish a known Mini-FDC position with RESTORE followed by SEEK to cylinder 1.
+establish a known position on the boot controller with RESTORE followed by SEEK to cylinder 1.
 Only after the IPL boot phase has ended does the system perform this first
 cylinder change.  The I/O server then DMA-loads all 26 sectors directly to Z80
 physical bank 0 at `$DC00-$F5FF`.
@@ -55,14 +55,15 @@ $0100-$DBFF   TPA (54.75 KiB)
 $DC00-$E3FF   CCP
 $E400-$F1FF   BDOS
 $F200-$F5FF   BIOS slot
-$F600-$F99F   currently free
-$F9A0-$FBE7   DIRBUF / CSV / ALV workspace
+$F600-$F95F   free / BIOS stack (SP=F960)
+$F970-$FBE7   DIRBUF / CSV / ALV workspace
+$FBF4         logical boot drive (0 or 4)
+$FBF5         boot controller family
 $FBF6-$FBFF   shared mailbox
 $FC00-$FFFF   memory-mapped I/O
 ```
 
-The build takes the relocated CCP+BDOS image from
-`external/cpm22/ccpbdos62.bin`. The BIOS is assembled at `$F200`, and the
+The build assembles the CCP+BDOS image from `cpm22/cpm22_fm11.asm`. The BIOS is assembled at `$F200`, and the
 combined system payload is exactly `$1A00` bytes.
 
 ## 6809 private mapping
@@ -83,10 +84,12 @@ occupies `$FBF6-$FBFF`.
 The CP/M mutable disk workspace is packed directly below the mailbox:
 
 ```text
-$F9A0-$FA1F   DIRBUF
-$FA20-$FB1F   CSV0-CSV7
-$FB20-$FBE7   ALV0-ALV7
-$FBE8-$FBF5   reserved / free
+$F970-$F9EF   DIRBUF
+$F9F0-$FAEF   CSV0-CSV7
+$FAF0-$FBE7   ALV0-ALV7
+$FBE8-$FBF3   reserved / free
+$FBF4         boot drive (0=A, 4=E)
+$FBF5         boot controller family
 $FBF6-$FBFF   mailbox
 ```
 
@@ -104,3 +107,8 @@ BIOS at `$F200-$F5FF` remains resident while the service call is in progress.
 After the reload completes, the BIOS restores current-drive state, resets the
 default DMA address to `$0080`, reinstalls the page-zero WBOOT and BDOS vectors,
 and jumps to the reloaded CCP at `$DC00`.
+
+The reload always targets the physical boot drive. The BIOS probes the saved
+current drive if different from the boot drive, and falls back to the boot
+drive on failure. CCP resets BDOS on the boot drive (including batch-file
+detection) before selecting the saved current drive and user.

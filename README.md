@@ -1,65 +1,34 @@
 # FM-11 CP/M-80
 
-Open-source BIOS, boot and I/O support for running CP/M-80 on the Fujitsu FM-11 with the Z80 card.
+CP/M 2.2 for the Fujitsu FM-11 with the Z80 card.
 
-## Initial target
+- 62K system: CCP at DC00h, BDOS entry at E406h, BIOS at F200h.
+- Fixed drive letters: A:-D: = 2D units 0-3; E:-H: = 2HD units 0-3, as in FM-11 CP/M-86.
+- 2D boots to A:, 2HD boots to E:. Warm boot preserves the current user and drive when available.
+- Resident 6809 I/O service, DMA sector reads/writes, write-through cache and physical RESTORE/SEEK.
+- Local console and serial console; bootable 2D and 2HD D88 and RAW images.
 
-- CP/M 2.2, Fujitsu-style 56K system layout
-- CCP at `$C400`, BDOS at `$CC00`, BIOS at `$DA00`
-- A: through D: = 2D floppy drives 0 through 3
-- E: through H: = 2HD floppy drives 0 through 3
-- No HDD or bubble-memory support initially
-- Z80 BIOS with a resident 6809 I/O service for floppy access
-- synchronous Z80/6809 mailbox protocol using `$FD05` CPU hand-off
+## Build
 
-The implementation follows the FM-11 hardware architecture and Fujitsu disk formats where useful, without requiring binary compatibility with Fujitsu's original CP/M implementation.
+Requires asm8080 (CCP/BDOS), z80asm (BIOS), lwasm (6809), Python 3 and make.
+Run `make`. The CCP/BDOS source is adapted from PC-9801 CP/M-80 v1.1;
+no external core binary is required. See [docs/build.md](docs/build.md).
+Optional COM files in external/commands/ are included in both images.
 
-## Build tools
+## Boot drive and SUBMIT
 
-- `z80asm` for Z80 sources
-- `lwasm` (LWTOOLS) for MC6809 sources
-- Python 3 and make
+BDOS function 13 resets the disk system on the actual boot drive; CCP reads
+and deletes the batch file `$$$.SUB` there. Standard SUBMIT.COM creates its
+batch file on the current drive: run it from the boot drive, specifying the
+input file's drive if necessary (e.g. `E>SUBMIT A:TEST`).
 
-See [docs/build.md](docs/build.md) for setup and the required external CCP+BDOS image.
+## Source and license
 
-The CP/M CCP+BDOS binary is intentionally not kept in Git. The current build expects a locally supplied **56K** core at `external/cpm22/ccpbdos56.bin`; a normal 62K image overlaps the resident 6809 I/O-service area and is therefore not suitable for this initial port.
+- cpm22/: CCP/BDOS and Z80 BIOS
+- m6809/: disk IPLs and resident I/O service
+- include/: hardware definitions
+- tools/: image builders and checks
+- docs/: build, hardware and disk documentation
 
-Optional CP/M `.COM` files can be placed in `external/commands/`; `make image` installs them into the generated 2D filesystem.
-
-## Current status
-
-The repository contains:
-
-- `z80asm`-compatible CP/M 2.2 BIOS and disk structures
-- direct standard-8251 console routines
-- Fujitsu-compatible DPH/DPB definitions for 2D and 2HD
-- A:-H: logical drive mapping
-- Z80/6809 mailbox definitions at `$EC00`
-- resident 6809 I/O-service dispatcher at `$DE00`
-- functional Mini FDC PIO READ path for A:-D: 2D drives
-- logical 128-byte to physical 256-byte sector deblocking
-- FM-11 ROM-loaded 2D stage-1 IPL at `$0400`
-- position-independent 6809 stage-2 cold loader at `$4000`
-- bootable-layout 2D CP/M filesystem builder with D88 and raw-image output
-- Makefile with binary-size/layout checks
-
-The stage-1 IPL follows the working FM-11 NitrOS-9 2D boot convention: the ROM loads T0/H0/S1-S2 to `$0400`, then stage 1 loads T0/H0/S3 through T1/H1/S16 to `$4000` and starts stage 2.
-
-WRITE, 2HD Standard-FDC transfer, and warm-boot reload remain to be implemented.
-
-## Source layout
-
-```text
-cpm22/bios/        Z80 CP/M 2.2 BIOS
-include/z80/       Z80-side FM-11 definitions
-include/6809/      6809-side FM-11 definitions
-m6809/             stage-1 IPL, stage-2 loader and resident I/O service
-tools/             build/layout and disk-image helpers
-external/cpm22/    local, untracked CCP+BDOS input
-external/commands/ local, untracked CP/M command binaries
-docs/              hardware, protocol, disk and build notes
-```
-
-## Reference media
-
-Original Fujitsu CP/M disk images are used only as reverse-engineering references and are not part of this repository. CP/M system binaries whose redistribution terms are unclear should likewise be supplied externally by the user/build environment.
+Original FM-11-specific code is covered by LICENSE; CP/M core by LICENSE.CPM.
+Original Fujitsu reference disk images are not distributed.

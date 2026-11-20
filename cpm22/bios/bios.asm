@@ -6,6 +6,7 @@
 ;   BIOS = F200h
 ;   6809 resident service = physical RAM above 10000h
 ;   disk workspace        = F970h-FBE7h
+;   boot drive            = FBF4h (0=A, 4=E)
 ;   boot type             = FBF5h (0=2D, 1=2HD)
 ;   mailbox               = FBF6h-FBFFh
 ;
@@ -22,8 +23,8 @@ BOOT_2D:        equ     00h
 BOOT_2HD:       equ     01h
 
 ; CP/M mutable disk workspace is packed directly below the shared boot-type
-; byte and mailbox. All eight ALVs reserve the larger 2HD size so logical
-; drive letters can swap controller families according to the boot source.
+; byte and mailbox. All eight ALVs retain the larger 2HD size to keep
+; the existing workspace layout.
 DIRBUF:         equ     0F970h
 CSV0:           equ     0F9F0h
 CSV1:           equ     CSV0+32
@@ -77,16 +78,17 @@ boot:
         inc     a
         ld      (0003h),a       ; IOBYTE: CON:=CRT selects FM-11 local console
         xor     a
-        ld      (0004h),a       ; current disk/user = user 0, A:
-        ld      (curdrv),a
         ld      (uc1_next),a
+        ld      a,(BOOTDRV)
+        ld      (0004h),a       ; user 0, actual boot drive
+        ld      (curdrv),a
         ld      hl,0080h
         ld      (curdma),hl
         call    serial_init     ; keep TTY ready for STAT CON:=TTY:
         call    setvec
         call    cold_banner
-        xor     a
-        ld      c,a             ; CCP entry C = uuuudddd = 00h
+        ld      a,(BOOTDRV)
+        ld      c,a             ; CCP entry C = uuuudddd
         jp      CCPBASE
 
 ; Cold-boot presentation is local-console only.  FM-11 native control $16
@@ -126,8 +128,8 @@ bootmsg:
 ; stack remains below DIRBUF at F970h.
 ;
 ; A fatal BDOS disk error can leave 0004h naming the drive that failed. Before
-; restoring a non-A: drive after WBOOT, probe its first data track. If the
-; drive/media is unavailable, fall back to A:, whose availability has already
+; restoring a non-boot drive after WBOOT, probe its first data track. If the
+; drive/media is unavailable, fall back to the boot drive, whose availability has already
 ; been proven by the successful system reload above.
 wboot:
         ld      sp,0F960h
@@ -143,9 +145,11 @@ wboot:
         and     00Fh
         cp      8
         jr      nc,.wboot_fallback
-        or      a
+        ld      b,a
+        ld      a,(BOOTDRV)
+        cp      b
         jr      z,.wboot_drive_ok
-
+        ld      a,b
         ld      (curdrv),a
         ld      bc,2            ; OFF=2 for both supported floppy formats
         ld      (curtrk),bc
@@ -160,7 +164,10 @@ wboot:
 
 .wboot_fallback:
         ld      a,(wbootinfo)
-        and     0F0h            ; preserve user, select boot drive A:
+        and     0F0h            ; preserve user, select actual boot drive
+        ld      b,a
+        ld      a,(BOOTDRV)
+        or      b
         ld      (wbootinfo),a
 
 .wboot_drive_ok:
@@ -373,11 +380,8 @@ home:
         ld      bc,0
         jp      settrk
 
-; C = CP/M drive number 0..7. A:-D: always name the controller family from
-; which CP/M booted; E:-H: name the other family. BOOTTYPE=0 means
-; A:-D:=2D and E:-H:=2HD. BOOTTYPE=1 reverses those assignments.
-; Returns HL=DPH or HL=0 if unsupported. The selected DPH's DPB pointer is
-; patched on every call so the same logical drive can describe either format.
+; C = CP/M drive number 0..7. A:-D: always 2D, E:-H: always 2HD.
+; Returns HL=DPH or HL=0 if unsupported. Each DPH has a fixed DPB.
 seldsk:
         ld      a,c
         cp      8
@@ -392,33 +396,6 @@ seldsk:
         inc     hl
         ld      d,(hl)
         ex      de,hl           ; HL = selected DPH
-
-        push    hl
-        ld      a,(BOOTTYPE)
-        and     01h             ; 0=2D primary, 1=2HD primary
-        ld      b,a
-        ld      a,c
-        and     04h             ; E:-H: use the opposite controller family
-        jr      z,.have_kind
-        ld      a,b
-        xor     01h
-        jr      .pick_dpb
-.have_kind:
-        ld      a,b
-.pick_dpb:
-        ld      de,dpb2d
-        or      a
-        jr      z,.patch_dpb
-        ld      de,dpb2hd
-.patch_dpb:
-        pop     hl
-        push    hl
-        ld      bc,10           ; DPH+10 = DPB pointer
-        add     hl,bc
-        ld      (hl),e
-        inc     hl
-        ld      (hl),d
-        pop     hl
         ret
 .bad_drive:
         ld      hl,0
@@ -508,7 +485,7 @@ mbox_simple:
 ; ----------------------------------------------------------------------
 
 ; DPH: XLT, 3 scratch words, DIRBUF, DPB, CSV, ALV.
-; The DPB field is patched by SELDSK according to BOOTTYPE.
+; The DPB field is fixed for each logical drive.
 
 dph0:
         dw      0,0,0,0,DIRBUF,dpb2d,CSV0,ALV0

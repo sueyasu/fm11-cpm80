@@ -8,6 +8,8 @@ Initial compatibility target: Fujitsu FM-11 floppy formats used by the original 
 - E:-H: 2HD floppy units 0-3, Standard FDC
 - I: and later: unsupported initially
 
+These assignments do not depend on the boot medium: 2D starts at A: and 2HD starts at E:.
+
 Bubble memory and HDD support are intentionally outside the first implementation.
 
 ## 2D
