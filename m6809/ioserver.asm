@@ -680,7 +680,9 @@ MiniFdcInvalidateDrive
         rts
 
 MiniFdcWaitType1
-        pshs    x
+        pshs    x,y
+        ldy     #64
+MftRetry
         ldx     #$FFFF
 MftWait
         lda     MINIFDC_STATUS
@@ -689,17 +691,20 @@ MftWait
         leax    -1,x
         cmpx    #0
         bne     MftWait
+        leay    -1,y
+        cmpy    #0
+        bne     MftRetry
         bra     MftFail
 MftDone
         bita    #FDC_SEEKERR
         bne     MftFail
         lda     MINIFDC_IRQ
         andcc   #$FE
-        puls    x,pc
+        puls    x,y,pc
 MftFail
         lda     MINIFDC_IRQ
         orcc    #$01
-        puls    x,pc
+        puls    x,y,pc
 
 MiniDmaSetupPrivate
         clr     DMA0_MODE
@@ -872,7 +877,9 @@ StdFdcInvalidateDrive
         rts
 
 StdFdcWaitType1
-        pshs    x
+        pshs    x,y
+        ldy     #64
+SftRetry
         ldx     #$FFFF
 SftWait
         lda     STDFDC_STATUS
@@ -881,17 +888,20 @@ SftWait
         leax    -1,x
         cmpx    #0
         bne     SftWait
+        leay    -1,y
+        cmpy    #0
+        bne     SftRetry
         bra     SftFail
 SftDone
         bita    #FDC_SEEKERR
         bne     SftFail
         lda     STDFDC_IRQ
         andcc   #$FE
-        puls    x,pc
+        puls    x,y,pc
 SftFail
         lda     STDFDC_IRQ
         orcc    #$01
-        puls    x,pc
+        puls    x,y,pc
 
 StdDmaSetupPrivate
         clr     DMA1_MODE

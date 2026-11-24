@@ -316,16 +316,24 @@ fdc_type1:
     ret
 
 fdc_wait_idle:
+    ; Timed FDC SEEK can exceed two seconds across 76 tracks.
+    ; Use a bounded outer timeout instead of a single 16-bit poll.
+    push bx
     push cx
+    mov bx,64
+.retry:
     mov cx,0xffff
 .poll:
     in al,dx
     test al,1
     jz .done                 ; TEST clears CF
     loop .poll
+    dec bx
+    jnz .retry
     stc
 .done:
     pop cx
+    pop bx
     ret
 
 ; Cold init and cache reset/media login must forget hardware positions.
