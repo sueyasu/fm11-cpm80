@@ -13,11 +13,13 @@ FORMAT HDD /S
 ```
 
 A:–D: are 2D, E:–H: are 2HD, I: or HDD denotes the whole MDC drive.
-Default floppy format writes all physical side-tracks with E5h and
-verifies every sector, leaving a usable empty CP/M directory.
+Default floppy format writes all physical side-tracks with E5h,
+leaving a usable empty CP/M directory. As with CP/M-86, a successful
+WRITE TRACK completes each side-track without reading back every sector.
  /L performs only this physical format, without installing a system.
 The resulting E5h directory is also empty (same physical fill).
- /S additionally installs a bootable system with the appropriate IPL.
+ /S additionally installs a bootable system with the appropriate IPL;
+its system writes are read back and checked.
 HDD default initializes only cylinder 0 and the 16 KiB directory;
 other sectors are untouched. /S installs the system after initialization.
 HDD /L is rejected. This is not a secure erase or physical HDD format.
@@ -43,7 +45,8 @@ disk; this is not a cross-CPU installation tool. No COM files are copied.
 | HDD | 0 | 512 | 6656 |
 
 Offsets in bytes. Sizes 512, 6144 and 6656 respectively.
-All physical writes are read back and compared. The special 2HD
+System-installation physical sector writes are read back and compared;
+the full-disk WRITE TRACK pass is not read back. The special 2HD
 first side-track uses 26 x 128-byte sectors, all other sectors are
 256 bytes. FDD stream matches the tested RAWTEST format.
 
@@ -51,13 +54,12 @@ In 6809+Z80, 8088+Z80 and V20 builds, RAW physical I/O flushes and
 invalidates the track cache **without forgetting the FDC's current
 physical head positions**. Explicit CACHE_RESET/cold initialization
 still forgets the positions. On 6809, a failed raw FDC command also
-invalidates positions; a successful WRITE TRACK or sector verification
-preserves them. This avoids RESTORE-to-track-zero and SEEK-back on every
-verification sector when the emulator uses `[floppy] timing=timed`.
-Formatting still reads back every physical sector and therefore takes
-real simulated disk-rotation time; the single message
-`Formatting and verifying all floppy tracks...` remains visible until
-the full disk completes.
+invalidates positions; successful WRITE TRACK and sector I/O preserve
+them. This avoids unnecessary RESTORE-to-track-zero and SEEK operations
+when the emulator uses `[floppy] timing=timed`. WRITE TRACK still takes
+simulated disk-rotation time, but the formatter no longer performs the
+extra full-disk readback pass. The message
+`Formatting all floppy tracks...` remains visible until that pass completes.
 
 ## Build and test
 
