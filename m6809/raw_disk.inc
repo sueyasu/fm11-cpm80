@@ -29,7 +29,7 @@ RawTransfer
         lbcs    RawBad
         cmpd    #$DC00
         lbhi    RawBad
-        lbsr    CacheReset
+        lbsr    CacheResetRaw
         lbcs    RawDone
         lbsr    RawDecode
         lbcs    RawDone
@@ -106,11 +106,15 @@ RawCheckStatus
         bra     RawFdcExit
 RawFdcBad
         orcc    #1
+        * A failed command leaves the physical position uncertain.
+        * Preserve success/failure carry while invalidating positions.
+        pshs    cc
+        lbsr    FdcInvalidatePositions
+        puls    cc
 RawFdcExit
         pshs    cc
         clr     ,u
         lda     7,y
-        lbsr    FdcInvalidatePositions
         puls    cc,pc
 RawHdd
         inc     HddRaw
