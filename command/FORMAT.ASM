@@ -620,33 +620,13 @@ FMTLOOP LXI B,5
         INR A
         STA SECNO
         JMP FMTLOOP
+; Like CP/M-86, finish each track after successful WRITE TRACK.
+; /S system installation still verifies its physical sector writes.
 FMTISSUE MVI A,0AH
         CALL PHYS
         ORA A
         JNZ FAIL
-        MVI A,1
-        STA SECNO
-FMTVERIFY LXI H,BUFFER
-        LXI B,256
-        MVI D,0
-        CALL FILL
-        MVI A,8
-        CALL PHYS
-        ORA A
-        JNZ FAIL
-        LHLD SIZE
-        MOV B,H
-        MOV C,L
-        LXI H,BUFFER
-        MVI D,0E5H
-        CALL MATCH
-        LDA SECNO
-        LXI H,SPT
-        CMP M
-        RZ
-        INR A
-        STA SECNO
-        JMP FMTVERIFY
+        RET
 FILL    MOV M,D
         INX H
         DCX B
@@ -674,7 +654,7 @@ MSGASK DB ': will be lost. Continue (Y/N)? ',24H
 MSGCANCEL DB 13,10,'Cancelled',13,10,24H
 MSGNL DB 13,10,24H
 MSGSOURCE DB 'Reading system from boot disk...',13,10,24H
-MSGFORMAT DB 'Formatting and verifying all floppy tracks...',13,10,24H
+MSGFORMAT DB 'Formatting all floppy tracks...',13,10,24H
 MSGHDD DB 'Initializing reserved cylinder and directory...',13,10,24H
 MSGINSTALL DB 'Installing and verifying boot system...',13,10,24H
 MSGDONE DB 'FORMAT complete',13,10,24H
