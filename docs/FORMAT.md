@@ -47,6 +47,16 @@ All physical writes are read back and compared. The special 2HD
 first side-track uses 26 x 128-byte sectors, all other sectors are
 256 bytes. FDD stream matches the tested RAWTEST format.
 
+In 8088+Z80/V20 builds, RAW physical I/O flushes and invalidates the
+track cache **without forgetting the FDC's current physical head
+positions**. Only explicit CACHE_RESET/cold initialization forgets the
+positions. This avoids a RESTORE-to-track-zero and SEEK-back on every
+verification sector when the emulator uses `[floppy] timing=timed`.
+Formatting still reads back every physical sector and therefore takes
+real simulated disk-rotation time; the single message
+`Formatting and verifying all floppy tracks...` remains visible until
+the full disk completes.
+
 ## Build and test
 
 ```sh
