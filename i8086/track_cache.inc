@@ -7,6 +7,12 @@
 ; All writes use the resident 256-byte bounce buffer for DMA.
 cache_init:
     mov byte [hdd_ready],0
+    call cache_clear_windows
+    jmp fdc_forget_all
+
+; Drop both track windows without touching the physical drive positions.
+; RAW sector operations need coherency but should not re-home the head.
+cache_clear_windows:
     mov byte [cache_used],0
     mov byte [cache_next],0
     mov word [cache_valid],0
@@ -17,9 +23,10 @@ cache_init:
     mov word [cache_dirty+2],0
     mov word [cache_dirty+4],0
     mov word [cache_dirty+6],0
-    jmp fdc_forget_all
+    ret
 
-; Cache-wide invalidate is only safe once all dirty data was flushed.
+; Explicit cache reset preserves its original conservative behavior:
+; flush, invalidate, and forget every FDC drive position.
 cache_invalidate:
     jmp cache_init
 
@@ -27,6 +34,18 @@ cache_reset:
     call cache_flush_all
     jc .done
     call cache_invalidate
+    clc
+.done:
+    ret
+
+; RAW_DISK_API operates on the same physical heads that the native server
+; tracks through fdc_cylinder. Flush and discard cached sectors, but retain
+; that position information. Calling cache_reset here caused every verify
+; sector to RESTORE and SEEK again (seconds per sector in timed mode).
+cache_reset_raw:
+    call cache_flush_all
+    jc .done
+    call cache_clear_windows
     clc
 .done:
     ret
