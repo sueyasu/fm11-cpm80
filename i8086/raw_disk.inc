@@ -46,7 +46,9 @@ raw_service:
     jbe .raw_skip4
     jmp .bad
 .raw_skip4:
-    call cache_reset
+    ; RAW I/O must discard stale cache contents without forgetting the
+    ; current mechanical head positions after every formatted sector.
+    call cache_reset_raw
     jnc .raw_skip5
     jmp .done
 .raw_skip5:
