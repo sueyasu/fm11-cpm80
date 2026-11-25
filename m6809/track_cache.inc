@@ -30,6 +30,17 @@ CacheReset
 CrDone
         rts
 
+* RAW_DISK_API must flush and invalidate cached sectors before direct
+* physical access, but it must not reset the FDC's known head positions.
+* Unlike CACHE_RESET, this also leaves HDD readiness state unchanged.
+CacheResetRaw
+        lbsr    CacheFlushAll
+        bcs     CrrDone
+        lbsr    CacheInvalidate
+        andcc   #$FE
+CrrDone
+        rts
+
 * Select the window matching the requested drive/cylinder/side.
 * A failed eviction leaves both tags and unwritten dirty bits intact.
 CacheSelect
